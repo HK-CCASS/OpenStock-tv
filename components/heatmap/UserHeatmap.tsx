@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { AlertCircle, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
+import { AlertCircle, Wifi, WifiOff } from 'lucide-react';
 
 // 数据结构
 interface StockData {
@@ -53,7 +53,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   const [data, setData] = useState<HeatmapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPool, setSelectedPool] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -224,7 +223,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     }
   }, [data, loading]);
 
-  // 初始化 ECharts（只在首次或 selectedPool 改变时重建）
+  // 初始化 ECharts（只在首次加载时）
   useEffect(() => {
     if (!chartRef.current) return;
 
@@ -235,16 +234,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     const chart = echarts.init(chartRef.current);
     chartInstanceRef.current = chart;
 
-    // 添加点击事件处理（仅一级视图）
-    if (!selectedPool) {
-      chart.on('click', function (params: any) {
-        // 检查是否点击了pool（有poolName和poolData）
-        if (params.data.poolName && params.data.poolData) {
-          console.log('[Heatmap] 点击pool:', params.data.poolName);
-          setSelectedPool(params.data.poolName);
-        }
-      });
-    }
+    // Finviz 风格不需要点击事件，直接显示所有层级
 
     const handleResize = () => {
       chart.resize();
@@ -260,7 +250,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         chartInstanceRef.current = null;
       }
     };
-  }, [selectedPool]);
+  }, []);
 
   // 更新 ECharts 数据（当 data 变化时）
   useEffect(() => {
@@ -269,45 +259,30 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     const chart = chartInstanceRef.current;
 
     // 转换数据为 ECharts 格式
-    let treeData;
-
-    if (selectedPool) {
-      // 二级视图：只显示选中池子的股票
-      const pool = data.pools.find((p) => p.poolName === selectedPool);
-      if (!pool) {
-        setSelectedPool(null);
-        return;
-      }
-
-      treeData = pool.stocks.map((stock) => {
-        const marketCap = stock.marketCap || 0;
+    // Finviz 风格：显示完整的两层结构（pool + stocks）
+    const treeData = data.pools.map((pool) => {
+      const children = pool.stocks.map((stock) => {
         return {
           name: stock.symbol,
-          value: marketCap,
+          value: stock.marketCap,
           stockData: stock,
           itemStyle: {
             color: getColorByChange(stock.changePercent),
           },
         };
       });
-    } else {
-      // 一级视图：只显示池子层级，不显示children
-      treeData = data.pools.map((pool) => {
-        return {
-          name: pool.poolName,
-          value: pool.totalMarketCap,
-          poolName: pool.poolName,
-          poolData: {
-            stockCount: pool.stockCount,
-            avgChangePercent: pool.avgChangePercent,
-          },
-          itemStyle: {
-            color: getColorByChange(pool.avgChangePercent),  // Pool 层级设置颜色
-          },
-          // 一级视图不包含 children，这样 treemap 就会显示 pools 而不是自动钻入
-        };
-      });
-    }
+
+      return {
+        name: pool.poolName,
+        value: pool.totalMarketCap,
+        poolName: pool.poolName,
+        poolData: {
+          stockCount: pool.stockCount,
+          avgChangePercent: pool.avgChangePercent,
+        },
+        children,  // 包含 children，显示完整的两层结构
+      };
+    });
 
     const option = {
       backgroundColor: '#1a1a1a',
@@ -351,8 +326,8 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             `;
           }
 
-          // 池子信息（一级视图）
-          if (!selectedPool && info.data.children) {
+          // Pool 信息
+          if (info.data.children) {
             const poolData = info.data.poolData;
             const stockCount = poolData?.stockCount || info.data.children?.length || 0;
             const avgChange = poolData?.avgChangePercent || 0;
@@ -368,7 +343,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                   平均涨跌幅: ${changeSign}${avgChange.toFixed(2)}%
                 </div>
                 <div style="color: #aaa; margin-top: 4px;">总市值: $${(totalValue / 1000000000).toFixed(2)}B</div>
-                <div style="color: #4CAF50; font-size: 11px; margin-top: 6px;">点击查看详情</div>
               </div>
             `;
           }
@@ -385,7 +359,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           top: 0,
           bottom: 0,
           roam: false,
-          nodeClick: selectedPool ? false : 'link',
+          nodeClick: false,  // Finviz 风格，禁用点击钻取
           squareRatio: 0.75,  // 优化小pool显示，值越小越接近正方形
           breadcrumb: {
             show: false,
@@ -399,9 +373,8 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             show: true,
             formatter: function (params: any) {
               const stock = params.data.stockData;
-              const poolData = params.data.poolData;
               
-              // 二级视图：显示股票信息
+              // 股票层级：显示股票信息
               if (stock) {
                 const changeSign = stock.changePercent >= 0 ? '+' : '';
                 return [
@@ -411,16 +384,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                 ].join('\n');
               }
               
-              // 一级视图：显示pool信息
-              if (poolData && !selectedPool) {
-                const changeSign = poolData.avgChangePercent >= 0 ? '+' : '';
-                return [
-                  `{poolName|${params.name}}`,
-                  `{poolStats|${poolData.stockCount}只股票}`,
-                  `{poolChange|${changeSign}${poolData.avgChangePercent.toFixed(2)}%}`,
-                ].join('\n');
-              }
-              
+              // Pool 层级不显示 label（使用 upperLabel）
               return '';
             },
             rich: {
@@ -464,7 +428,24 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             ellipsis: '...',
           },
           upperLabel: {
-            show: false,  // 不显示upperLabel，统一使用label
+            show: true,
+            height: 30,
+            color: '#fff',
+            fontSize: 16,
+            fontWeight: 'bold',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            borderRadius: 4,
+            padding: [6, 10],
+            formatter: function (params: any) {
+              const poolData = params.data.poolData;
+              if (poolData) {
+                const changeSign = poolData.avgChangePercent >= 0 ? '+' : '';
+                return `${params.name} (${poolData.stockCount}只 ${changeSign}${poolData.avgChangePercent.toFixed(2)}%)`;
+              }
+              return params.name;
+            },
           },
           levels: [
             {
@@ -503,7 +484,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     setTimeout(() => {
       chart.resize();
     }, 0);
-  }, [data, selectedPool]);
+  }, [data]);
 
   if (error && !data) {
     return (
@@ -527,17 +508,8 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     <div className="w-full h-screen bg-[#1a1a1a] flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
       <div className="bg-[#1f1f1f] border-b border-[#2a2a2a] px-6 py-3 flex items-center gap-4 flex-shrink-0">
-        {selectedPool && (
-          <button
-            onClick={() => setSelectedPool(null)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-[#2a2a2a] text-white rounded hover:bg-[#333] transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            返回
-          </button>
-        )}
         <h1 className="text-white text-lg font-semibold">
-          {selectedPool || '热力图'}
+          股票市场热力图
         </h1>
         
         {/* SSE 连接状态 */}
