@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import StockTile from './StockTile';
 import LayoutControls from './LayoutControls';
-import TradingViewQuote from './TradingViewQuote';
+// import TradingViewQuote from './TradingViewQuote'; // 暂时禁用，跨域限制
 import { ChartType, Interval, TimeRange } from './TradingViewMiniChart';
 import type { StockQuote, SortOption, ColumnCount } from '@/lib/types/multi-stock.types';
 import type { WatchlistInfo } from '@/lib/adapters/multi-stock-adapter';
@@ -128,6 +128,8 @@ export default function StockGridController({
   }, [symbols]);
 
   // 处理从 TradingView Widget 提取的数据更新
+  // 注意: 此函数暂时未使用，因为 TradingViewQuote 组件已禁用
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleQuoteUpdate = (symbol: string, price: number, change: number, changePercent: number, volume: number) => {
     console.log(`[StockGridController] TradingView data for ${symbol}:`, { price, change, changePercent, volume });
     
@@ -235,13 +237,15 @@ export default function StockGridController({
       )}
 
       {/* 隐藏的 TradingView Quote Widgets 用于提取成交量数据 */}
-      {symbols.map(({ symbol }) => (
+      {/* 注意: 由于跨域限制，此功能暂时禁用 */}
+      {/* 如需启用，请取消下面的注释 */}
+      {/* {symbols.map(({ symbol }) => (
         <TradingViewQuote
           key={`quote-${symbol}`}
           symbol={symbol}
           onPriceUpdate={handleQuoteUpdate}
         />
-      ))}
+      ))} */}
     </div>
   );
 }
