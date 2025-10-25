@@ -399,12 +399,16 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     };
   }, [data, loading]); // data 变化时重新连接（例如用户切换账号）
 
-  // 对数平滑函数（减少市值极端差异）
+  // 平方根平滑函数（温和压缩市值差异，保留更多细节）
   const smoothValue = (marketCap: number): number => {
     if (marketCap <= 0) return 1;
-    // 使用对数平滑：log(1 + marketCap)
-    // 这样可以压缩极端值，让小股票也能显示
-    return Math.log(1 + marketCap);
+    // 使用平方根平滑：√marketCap
+    // 比对数温和，压缩极端值同时保留相对大小
+    // 例如：
+    //   线性：3T vs 100B = 30:1
+    //   对数：log(3T) vs log(100B) ≈ 3:1（太激进）
+    //   平方根：√(3T) vs √(100B) ≈ 5.5:1（适中）
+    return Math.sqrt(marketCap);
   };
 
   // 构建 ECharts 配置（提取为独立函数，便于维护）
@@ -551,12 +555,38 @@ export default function UserHeatmap({ userId }: { userId: string }) {
               const stock = params.data.stockData;
               
               if (stock) {
+                // 根据方块大小决定显示内容（降低阈值以适应实际情况）
+                const area = params.rect?.width * params.rect?.height || 0;
                 const changeSign = stock.changePercent >= 0 ? '+' : '';
-                return [
-                  `{symbol|${stock.symbol}}`,
-                  `{price|$${stock.last.toFixed(2)}}`,
-                  `{change|${changeSign}${stock.changePercent.toFixed(2)}%}`,
-                ].join('\n');
+                
+                // 调试：输出方块大小（开发时使用）
+                if (Math.random() < 0.01) { // 随机采样 1%
+                  console.log(`[Label] ${stock.symbol} 方块大小: ${area.toFixed(0)}px² (${params.rect?.width.toFixed(0)}x${params.rect?.height.toFixed(0)})`);
+                }
+                
+                // 大方块（> 1500px²）：显示完整信息
+                if (area > 1500) {
+                  return [
+                    `{symbol|${stock.symbol}}`,
+                    `{price|$${stock.last.toFixed(2)}}`,
+                    `{change|${changeSign}${stock.changePercent.toFixed(2)}%}`,
+                  ].join('\n');
+                }
+                // 中等方块（800-1500px²）：只显示股票名和涨跌幅
+                else if (area > 800) {
+                  return [
+                    `{symbol|${stock.symbol}}`,
+                    `{change|${changeSign}${stock.changePercent.toFixed(1)}%}`,
+                  ].join('\n');
+                }
+                // 小方块（200-800px²）：只显示股票名
+                else if (area > 200) {
+                  return `{symbolSmall|${stock.symbol}}`;
+                }
+                // 极小方块（< 200px²）：不显示文字
+                else {
+                  return '';
+                }
               }
               
               return '';
@@ -567,6 +597,12 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                 fontWeight: 'bold',
                 color: '#fff',
                 lineHeight: 20,
+              },
+              symbolSmall: {
+                fontSize: 10,
+                fontWeight: 'bold',
+                color: '#fff',
+                lineHeight: 14,
               },
               price: {
                 fontSize: 12,
