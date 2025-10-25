@@ -5,6 +5,7 @@ import {getAllUsersForNewsEmail} from "@/lib/actions/user.actions";
 import { getWatchlistSymbolsByEmail } from "@/lib/actions/watchlist.actions";
 import { getNews } from "@/lib/actions/finnhub.actions";
 import { getFormattedTodayDate } from "@/lib/utils";
+import { getAllWatchlistSymbols, getMarketCapCache } from "@/lib/actions/heatmap.actions";
 
 export const sendSignUpEmail = inngest.createFunction(
     { id: 'sign-up-email' },
@@ -116,5 +117,59 @@ export const sendDailyNewsSummary = inngest.createFunction(
         })
 
         return { success: true, message: 'Daily news summary emails sent successfully' }
+    }
+)
+
+/**
+ * 每天更新市值缓存
+ * 运行时间：每天凌晨 2 点（UTC）
+ */
+export const updateMarketCapCache = inngest.createFunction(
+    { id: 'update-market-cap-cache' },
+    [{ event: 'app/update.market.cap' }, { cron: '0 2 * * *' }],
+    async ({ step }) => {
+        // Step #1: 获取所有观察列表的股票代码
+        const symbols = await step.run('get-all-symbols', getAllWatchlistSymbols);
+
+        if (!symbols || symbols.length === 0) {
+            return { success: false, message: 'No symbols found in watchlists' };
+        }
+
+        console.log(`[Market Cap Update] Found ${symbols.length} unique symbols to update`);
+
+        // Step #2: 批量更新市值缓存（分批处理，每批 50 个）
+        const batchSize = 50;
+        const batches = [];
+        for (let i = 0; i < symbols.length; i += batchSize) {
+            batches.push(symbols.slice(i, i + batchSize));
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (let i = 0; i < batches.length; i++) {
+            try {
+                await step.run(`update-batch-${i + 1}`, async () => {
+                    const batch = batches[i];
+                    await getMarketCapCache(batch);
+                    return { success: true, count: batch.length };
+                });
+                successCount += batches[i].length;
+                console.log(`[Market Cap Update] Batch ${i + 1}/${batches.length} completed (${batches[i].length} symbols)`);
+            } catch (error) {
+                errorCount += batches[i].length;
+                console.error(`[Market Cap Update] Batch ${i + 1} failed:`, error);
+            }
+        }
+
+        return {
+            success: true,
+            message: `Market cap cache updated: ${successCount} succeeded, ${errorCount} failed`,
+            stats: {
+                totalSymbols: symbols.length,
+                successCount,
+                errorCount,
+            },
+        };
     }
 )

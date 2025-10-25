@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { AlertCircle, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 
@@ -57,6 +57,104 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   const [sseConnected, setSseConnected] = useState(false);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  
+  // SSE 更新节流：使用 RAF 批量处理
+  const updateQueueRef = useRef<Map<string, any>>(new Map());
+  const rafIdRef = useRef<number | null>(null);
+
+  // 批量更新调度（使用 requestAnimationFrame）
+  const scheduleUpdate = useCallback((update: {
+    symbol: string;
+    price: number;
+    change: number;
+    changePercent: number;
+    volume: number;
+  }) => {
+    // 将更新加入队列（相同 symbol 会覆盖旧值）
+    updateQueueRef.current.set(update.symbol, update);
+
+    // 如果已有待处理的 RAF，不重复调度
+    if (rafIdRef.current !== null) return;
+
+    // 调度批量更新（在下一帧执行）
+    rafIdRef.current = requestAnimationFrame(() => {
+      const updates = Array.from(updateQueueRef.current.values());
+      updateQueueRef.current.clear();
+      rafIdRef.current = null;
+
+      // 批量应用所有更新
+      if (updates.length > 0) {
+        console.log(`[Update] Processing ${updates.length} stock updates`);
+        batchUpdateStockQuotes(updates);
+      }
+    });
+  }, []);
+
+  // 批量更新股票报价（优化版：一次性更新多个股票）
+  const batchUpdateStockQuotes = (updates: Array<{
+    symbol: string;
+    price: number;
+    change: number;
+    changePercent: number;
+    volume: number;
+  }>) => {
+    setData((prevData) => {
+      if (!prevData) return prevData;
+
+      // 构建 symbol -> update 映射，快速查找
+      const updateMap = new Map(updates.map(u => [u.symbol, u]));
+      let hasChanges = false;
+
+      const updatedPools = prevData.pools.map((pool) => {
+        let poolChanged = false;
+        const updatedStocks = pool.stocks.map((stock) => {
+          const update = updateMap.get(stock.symbol);
+          if (update) {
+            poolChanged = true;
+            hasChanges = true;
+
+            // 计算实时市值
+            const realTimeMarketCap = stock.marketCapBase && stock.priceBase
+              ? stock.marketCapBase * (update.price / stock.priceBase)
+              : stock.marketCap || 0;
+
+            return {
+              ...stock,
+              last: update.price,
+              change: update.change,
+              changePercent: update.changePercent,
+              volume: update.volume,
+              marketCap: realTimeMarketCap,
+            };
+          }
+          return stock;
+        });
+
+        // 如果该 pool 有变化，重新计算统计
+        if (poolChanged) {
+          const totalMarketCap = updatedStocks.reduce((sum, s) => sum + (s.marketCap || 0), 0);
+          const avgChangePercent = updatedStocks.length > 0
+            ? updatedStocks.reduce((sum, s) => sum + s.changePercent, 0) / updatedStocks.length
+            : 0;
+
+          return {
+            ...pool,
+            stocks: updatedStocks,
+            totalMarketCap,
+            avgChangePercent,
+          };
+        }
+
+        return pool; // 无变化，保持引用
+      });
+
+      // 如果有任何变化，返回新状态
+      return hasChanges ? {
+        pools: updatedPools,
+        timestamp: new Date(),
+      } : prevData;
+    });
+  };
 
   // 获取初始数据
   const fetchInitialData = async () => {
@@ -79,32 +177,60 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
       // 转换 API 数据为内部格式
       const pools: PoolGroup[] = result.data.pools.map((apiPool: any) => {
-        const stocks: StockData[] = apiPool.cells.map((cell: any) => ({
-          symbol: cell.symbol,
-          name: cell.name,
-          last: cell.last,
-          change: cell.change,
-          changePercent: cell.changePercent,
-          volume: cell.volume,
-          category: cell.category,
-          marketCap: cell.marketCap,
-          marketCapBase: cell.marketCap, // 保存市值基准
-          priceBase: cell.last,            // 保存价格基准
-        }));
+        const stocks: StockData[] = apiPool.cells.map((cell: any) => {
+          // 验证和修正市值数据
+          let marketCap = cell.marketCap;
+          let usedFallback = false;
+          
+          // 如果市值缺失、为 0 或异常，使用价格作为权重（相对大小）
+          if (!marketCap || marketCap <= 0 || !isFinite(marketCap)) {
+            // 使用价格 × 流通股数假设值（10亿）作为默认市值
+            // 这样可以保持不同价格股票的相对大小合理
+            marketCap = (cell.last || 1) * 1000000000;
+            usedFallback = true;
+            console.warn(
+              `[Heatmap] ${cell.symbol} 市值数据异常 (原值: ${cell.marketCap})，` +
+              `使用回退值: ${(marketCap / 1000000000).toFixed(2)}B (价格 × 1B)`
+            );
+          }
+
+          return {
+            symbol: cell.symbol,
+            name: cell.name,
+            last: cell.last,
+            change: cell.change,
+            changePercent: cell.changePercent,
+            volume: cell.volume,
+            category: cell.category,
+            marketCap,
+            marketCapBase: marketCap, // 保存市值基准
+            priceBase: cell.last,      // 保存价格基准
+            __fallback: usedFallback,  // 标记是否使用了回退值
+          };
+        });
+
+        // 重新计算 pool 的总市值
+        const totalMarketCap = stocks.reduce((sum, s) => sum + (s.marketCap || 0), 0);
 
         return {
           poolName: apiPool.poolName,
           stockCount: apiPool.stockCount,
           avgChangePercent: apiPool.avgChangePercent,
-          totalMarketCap: apiPool.totalMarketCap,
+          totalMarketCap,
           stocks,
         };
       });
 
+      // 调试日志：输出每个 Pool 的详细信息
       const poolsInfo = pools.map(p => ({ 
         name: p.poolName, 
         stockCount: p.stockCount,
-        totalMarketCap: (p.totalMarketCap / 1000000000).toFixed(2) + 'B'
+        totalMarketCap: (p.totalMarketCap / 1000000000).toFixed(2) + 'B',
+        stocks: p.stocks.map(s => ({
+          symbol: s.symbol,
+          marketCap: ((s.marketCap || 0) / 1000000000).toFixed(2) + 'B',
+          price: s.last.toFixed(2),
+        }))
       }));
       
       console.log('[Heatmap Debug] 获取到的 pools 数量:', pools.length);
@@ -123,208 +249,214 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     }
   };
 
-  // 连接 SSE 实时更新
+  // 连接 SSE 实时更新（健壮版：支持重连、心跳、超时）
   const connectSSE = () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
+    let retryCount = 0;
+    const maxRetries = 5;
+    let reconnectTimer: NodeJS.Timeout | null = null;
+    let heartbeatTimer: NodeJS.Timeout | null = null;
+    let lastMessageTime = Date.now();
 
-    const eventSource = new EventSource('/api/heatmap/stream');
-    eventSourceRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      console.log('[SSE] Connected');
-      setSseConnected(true);
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const update = JSON.parse(event.data);
-
-        // 连接确认消息
-        if (update.type === 'connected') {
-          console.log('[SSE] Connection confirmed:', update.clientId);
-          return;
-        }
-
-        // 股票报价更新
-        if (update.symbol) {
-          updateStockQuote(update);
-        }
-      } catch (err) {
-        console.error('[SSE] Failed to parse message:', err);
+    const clearTimers = () => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
       }
     };
 
-    eventSource.onerror = () => {
-      console.error('[SSE] Connection error');
-      setSseConnected(false);
-      // EventSource 会自动重连
+    const connect = () => {
+      // 清理旧连接
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+
+      console.log(`[SSE] Connecting... (attempt ${retryCount + 1}/${maxRetries + 1})`);
+
+      const eventSource = new EventSource('/api/heatmap/stream');
+      eventSourceRef.current = eventSource;
+
+      eventSource.onopen = () => {
+        console.log('[SSE] Connected successfully');
+        setSseConnected(true);
+        retryCount = 0; // 重置重试计数
+        lastMessageTime = Date.now();
+
+        // 启动心跳检测（每 10 秒检查一次）
+        heartbeatTimer = setInterval(() => {
+          const timeSinceLastMessage = Date.now() - lastMessageTime;
+          const timeout = 30000; // 30 秒超时
+
+          if (timeSinceLastMessage > timeout) {
+            console.warn('[SSE] Connection timeout (no message for 30s), reconnecting...');
+            eventSource.close();
+            setSseConnected(false);
+            attemptReconnect();
+          }
+        }, 10000);
+      };
+
+      eventSource.onmessage = (event) => {
+        lastMessageTime = Date.now(); // 更新最后消息时间
+
+        try {
+          const update = JSON.parse(event.data);
+
+          // 连接确认消息
+          if (update.type === 'connected') {
+            console.log('[SSE] Connection confirmed:', update.clientId);
+            return;
+          }
+
+          // 心跳消息
+          if (update.type === 'heartbeat') {
+            console.log('[SSE] Heartbeat received');
+            return;
+          }
+
+          // 股票报价更新（使用节流调度）
+          if (update.symbol) {
+            scheduleUpdate(update);
+          }
+        } catch (err) {
+          console.error('[SSE] Failed to parse message:', err);
+        }
+      };
+
+      eventSource.onerror = () => {
+        console.error('[SSE] Connection error');
+        setSseConnected(false);
+        clearTimers();
+        eventSource.close();
+        attemptReconnect();
+      };
+    };
+
+    const attemptReconnect = () => {
+      if (retryCount >= maxRetries) {
+        console.error('[SSE] Max retries reached, giving up');
+        setError('实时连接失败，请刷新页面重试');
+        return;
+      }
+
+      // 指数退避：1s, 2s, 4s, 8s, 16s（最大 30s）
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+      console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+
+      reconnectTimer = setTimeout(() => {
+        retryCount++;
+        connect();
+      }, delay);
+    };
+
+    // 开始连接
+    connect();
+
+    // 返回清理函数
+    return () => {
+      clearTimers();
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
     };
   };
 
-  // 更新股票报价
-  const updateStockQuote = (update: {
-    symbol: string;
-    price: number;
-    change: number;
-    changePercent: number;
-    volume: number;
-  }) => {
-    setData((prevData) => {
-      if (!prevData) return prevData;
-
-      const newPools = prevData.pools.map((pool) => {
-        const newStocks = pool.stocks.map((stock) => {
-          if (stock.symbol === update.symbol) {
-            // 计算实时市值
-            const realTimeMarketCap = stock.marketCapBase && stock.priceBase
-              ? stock.marketCapBase * (update.price / stock.priceBase)
-              : stock.marketCap || 0;
-
-            return {
-              ...stock,
-              last: update.price,
-              change: update.change,
-              changePercent: update.changePercent,
-              volume: update.volume,
-              marketCap: realTimeMarketCap,
-            };
-          }
-          return stock;
-        });
-
-        // 重新计算池子统计
-        const totalMarketCap = newStocks.reduce((sum, s) => sum + (s.marketCap || 0), 0);
-        const avgChangePercent = newStocks.length > 0
-          ? newStocks.reduce((sum, s) => sum + s.changePercent, 0) / newStocks.length
-          : 0;
-
-        return {
-          ...pool,
-          stocks: newStocks,
-          totalMarketCap,
-          avgChangePercent,
-        };
-      });
-
-      return {
-        pools: newPools,
-        timestamp: new Date(),
-      };
-    });
-  };
+  // 组件卸载时清理 RAF
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      updateQueueRef.current.clear();
+    };
+  }, []);
 
   // 初始化数据和 SSE 连接
   useEffect(() => {
     fetchInitialData();
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
+    // 不在这里清理 SSE，由下面的 useEffect 管理
   }, [userId]);
 
   // 当初始数据加载完成后，连接 SSE（只连接一次）
   useEffect(() => {
-    if (data && !loading && !eventSourceRef.current) {
-      connectSSE();
-    }
-  }, [data, loading]);
+    if (!data || loading) return;
 
-  // 初始化 ECharts（只在首次或 selectedPool 改变时重建）
-  useEffect(() => {
-    if (!chartRef.current) return;
+    let cleanup: (() => void) | undefined;
 
-    if (chartInstanceRef.current) {
-      chartInstanceRef.current.dispose();
-    }
-
-    const chart = echarts.init(chartRef.current);
-    chartInstanceRef.current = chart;
-
-    // 添加点击事件处理（仅一级视图）
-    if (!selectedPool) {
-      chart.on('click', function (params: any) {
-        // 检查是否点击了 pool（有 children）
-        if (params.data.children && params.data.poolName) {
-          setSelectedPool(params.data.poolName);
-        }
-      });
-    }
-
-    const handleResize = () => {
-      chart.resize();
-    };
-
-    window.addEventListener('resize', handleResize);
+    // 延迟连接，确保组件完全初始化
+    const timer = setTimeout(() => {
+      cleanup = connectSSE();
+    }, 100);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.off('click');
-      if (chartInstanceRef.current) {
-        chartInstanceRef.current.dispose();
-        chartInstanceRef.current = null;
-      }
+      clearTimeout(timer);
+      if (cleanup) cleanup();
     };
-  }, [selectedPool]);
+  }, [data, loading]); // data 变化时重新连接（例如用户切换账号）
 
-  // 更新 ECharts 数据（当 data 变化时）
-  useEffect(() => {
-    if (!chartInstanceRef.current || !data) return;
+  // 对数平滑函数（减少市值极端差异）
+  const smoothValue = (marketCap: number): number => {
+    if (marketCap <= 0) return 1;
+    // 使用对数平滑：log(1 + marketCap)
+    // 这样可以压缩极端值，让小股票也能显示
+    return Math.log(1 + marketCap);
+  };
 
-    const chart = chartInstanceRef.current;
-
+  // 构建 ECharts 配置（提取为独立函数，便于维护）
+  const buildChartOption = (data: HeatmapData, selectedPool: string | null) => {
     // 转换数据为 ECharts 格式
     let treeData;
 
     if (selectedPool) {
       // 二级视图：只显示选中 pool 的股票
       const pool = data.pools.find((p) => p.poolName === selectedPool);
-      if (!pool) {
-        setSelectedPool(null);
-        return;
-      }
+      if (!pool) return null;
 
-      treeData = pool.stocks.map((stock) => {
-        return {
+      treeData = pool.stocks.map((stock) => ({
+        name: stock.symbol,
+        value: smoothValue(stock.marketCap || 0), // 使用平滑值
+        realMarketCap: stock.marketCap || 0,       // 保存真实市值（tooltip 显示）
+        stockData: stock,
+        itemStyle: {
+          color: getColorByChange(stock.changePercent),
+        },
+      }));
+    } else {
+      // 一级视图：Finviz 风格，显示所有 pool + stocks
+      treeData = data.pools.map((pool) => {
+        const children = pool.stocks.map((stock) => ({
           name: stock.symbol,
-          value: stock.marketCap,
+          value: smoothValue(stock.marketCap || 0), // 使用平滑值
+          realMarketCap: stock.marketCap || 0,       // 保存真实市值
           stockData: stock,
           itemStyle: {
             color: getColorByChange(stock.changePercent),
           },
-        };
-      });
-    } else {
-      // 一级视图：Finviz 风格，显示所有 pool + stocks
-      treeData = data.pools.map((pool) => {
-        const children = pool.stocks.map((stock) => {
-          return {
-            name: stock.symbol,
-            value: stock.marketCap,
-            stockData: stock,
-            itemStyle: {
-              color: getColorByChange(stock.changePercent),
-            },
-          };
-        });
+        }));
+
+        // Pool 的 value 也使用所有股票平滑值的总和
+        const poolValue = children.reduce((sum, child) => sum + child.value, 0);
 
         return {
           name: pool.poolName,
-          value: pool.totalMarketCap,
+          value: poolValue,                     // 使用平滑值总和
+          realMarketCap: pool.totalMarketCap,  // 保存真实市值
           poolName: pool.poolName,
           poolData: {
             stockCount: pool.stockCount,
             avgChangePercent: pool.avgChangePercent,
           },
-          children,  // 包含 children，显示完整的两层结构
+          children,
         };
       });
     }
 
-    const option = {
+    return {
       backgroundColor: '#1a1a1a',
       grid: {
         left: 0,
@@ -371,7 +503,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             const poolData = info.data.poolData;
             const stockCount = poolData?.stockCount || info.data.children?.length || 0;
             const avgChange = poolData?.avgChangePercent || 0;
-            const totalValue = info.value;
+            const realMarketCap = info.data.realMarketCap || 0; // 使用真实市值
             const changeColor = avgChange >= 0 ? '#66BB6A' : '#EF5350';
             const changeSign = avgChange >= 0 ? '+' : '';
 
@@ -382,7 +514,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                 <div style="color: ${changeColor}; margin-top: 4px;">
                   平均涨跌幅: ${changeSign}${avgChange.toFixed(2)}%
                 </div>
-                <div style="color: #aaa; margin-top: 4px;">总市值: $${(totalValue / 1000000000).toFixed(2)}B</div>
+                <div style="color: #aaa; margin-top: 4px;">总市值: $${(realMarketCap / 1000000000).toFixed(2)}B</div>
                 <div style="color: #4CAF50; font-size: 11px; margin-top: 6px;">点击查看该板块详情</div>
               </div>
             `;
@@ -400,10 +532,11 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           top: 0,
           bottom: 0,
           roam: false,
-          nodeClick: selectedPool ? false : 'link',  // 一级视图可点击，二级视图禁用
-          squareRatio: 0.75,  // 优化小pool显示，值越小越接近正方形
-          visibleMin: 300,  // 最小可见面积（像素²），确保小pool也能显示（约20x15px）
-          childrenVisibleMin: 50,  // 子节点最小可见面积
+          nodeClick: selectedPool ? false : 'link',
+          leafDepth: selectedPool ? 0 : 2, // 一级视图显示 2 层，二级视图显示 1 层
+          squareRatio: 0.5,  // 降低比例，更接近正方形
+          visibleMin: 10,    // 最小可见面积（像素²），确保小股票也能显示
+          childrenVisibleMin: 10,  // 子节点最小可见面积
           breadcrumb: {
             show: false,
           },
@@ -417,7 +550,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             formatter: function (params: any) {
               const stock = params.data.stockData;
               
-              // 股票层级：显示股票信息
               if (stock) {
                 const changeSign = stock.changePercent >= 0 ? '+' : '';
                 return [
@@ -427,11 +559,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                 ].join('\n');
               }
               
-              // Pool 层级不显示 label（使用 upperLabel）
               return '';
             },
             rich: {
-              // 股票标签样式
               symbol: {
                 fontSize: 14,
                 fontWeight: 'bold',
@@ -448,7 +578,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                 color: '#fff',
                 lineHeight: 16,
               },
-              // Pool标签样式
               poolName: {
                 fontSize: 18,
                 fontWeight: 'bold',
@@ -518,12 +647,62 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         },
       ],
     };
+  };
 
+  // 初始化 ECharts（只在挂载时初始化一次，避免内存泄漏）
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    const chart = echarts.init(chartRef.current);
+    chartInstanceRef.current = chart;
+
+    // 添加点击事件处理
+    const handleClick = (params: any) => {
+      // 只在一级视图且点击了 pool 时切换
+      if (!selectedPool && params.data.children && params.data.poolName) {
+        setSelectedPool(params.data.poolName);
+      }
+    };
+
+    chart.on('click', handleClick);
+
+    const handleResize = () => {
+      chart.resize();
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.off('click', handleClick);
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.dispose();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, []); // 只在挂载时执行一次
+
+  // 更新 ECharts 数据（当 data 或 selectedPool 变化时）
+  useEffect(() => {
+    if (!chartInstanceRef.current || !data) return;
+
+    const chart = chartInstanceRef.current;
+    const option = buildChartOption(data, selectedPool);
+
+    if (!option) {
+      // 如果选中的 pool 不存在，返回一级视图
+      setSelectedPool(null);
+      return;
+    }
+
+    // 使用优化的配置参数
     chart.setOption(option, {
-      notMerge: false,
-      lazyUpdate: false,
+      notMerge: true,   // 完全替换配置，避免旧数据污染
+      lazyUpdate: true, // 启用批量更新，提升性能
+      silent: false,    // 允许触发事件（用户交互）
     });
 
+    // 异步 resize 确保尺寸正确
     setTimeout(() => {
       chart.resize();
     }, 0);

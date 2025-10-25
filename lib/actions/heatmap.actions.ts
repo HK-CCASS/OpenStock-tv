@@ -89,33 +89,122 @@ export async function getUserHeatmapData(userId: string): Promise<{
 }
 
 /**
- * 获取市值缓存数据（每日更新）
- * TODO: 实现 Redis 或数据库缓存，当前直接调用 Finnhub API
+ * 获取市值缓存数据（MongoDB + API 回退）
+ * 优先从数据库读取，如果缺失或过期则调用 API 并更新缓存
  */
-export async function getMarketCapCache(symbols: string[]): Promise<Map<string, number>> {
+export async function getMarketCapCache(symbols: string[]): Promise<Map<string, {
+  marketCap: number;
+  price: number;
+  source: string;
+}>> {
   if (symbols.length === 0) {
     return new Map();
   }
 
   try {
-    // 批量获取股票报价（包含市值）
-    const quotesMap = await getBatchStockQuotes(symbols);
-    
-    // 提取市值数据
-    const marketCapMap = new Map<string, number>();
-    quotesMap.forEach((data, symbol) => {
-      marketCapMap.set(symbol, data.marketCap || 0);
+    await connectToDatabase();
+    const { MarketCap } = await import('@/database/models/market-cap.model');
+
+    const now = new Date();
+    const normalizedSymbols = symbols.map(s => s.toUpperCase());
+
+    // 1. 从数据库查询有效缓存
+    const cachedData = await MarketCap.find({
+      symbol: { $in: normalizedSymbols },
+      validUntil: { $gt: now },
+    }).lean();
+
+    const resultMap = new Map<string, { marketCap: number; price: number; source: string }>();
+    const cachedSymbols = new Set<string>();
+
+    // 2. 填充已缓存的数据
+    cachedData.forEach((item: any) => {
+      resultMap.set(item.symbol, {
+        marketCap: item.marketCap,
+        price: item.price,
+        source: item.source,
+      });
+      cachedSymbols.add(item.symbol);
     });
 
-    return marketCapMap;
+    // 3. 查找缺失或过期的股票代码
+    const missingSymbols = normalizedSymbols.filter(s => !cachedSymbols.has(s));
+
+    // 4. 如果有缺失的，从 API 获取并缓存
+    if (missingSymbols.length > 0) {
+      console.log(`[MarketCap Cache] Fetching ${missingSymbols.length} missing symbols from API`);
+      
+      const quotesMap = await getBatchStockQuotes(missingSymbols);
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+
+      // 批量更新数据库
+      const bulkOps = Array.from(quotesMap.entries()).map(([symbol, data]) => {
+        let marketCap = data.marketCap || 0;
+        let source = 'finnhub';
+
+        // 如果市值无效，使用价格估算
+        if (marketCap <= 0) {
+          marketCap = (data.price || 1) * 1000000000;
+          source = 'fallback';
+          console.warn(
+            `[MarketCap Cache] ${symbol} 市值无效，使用回退值: ${(marketCap / 1000000000).toFixed(2)}B`
+          );
+        }
+
+        // 添加到结果
+        resultMap.set(symbol, {
+          marketCap,
+          price: data.price || 0,
+          source,
+        });
+
+        // 准备数据库更新操作
+        return {
+          updateOne: {
+            filter: { symbol },
+            update: {
+              $set: {
+                marketCap,
+                price: data.price || 0,
+                source,
+                lastUpdated: now,
+                validUntil: tomorrow,
+              },
+            },
+            upsert: true,
+          },
+        };
+      });
+
+      if (bulkOps.length > 0) {
+        await MarketCap.bulkWrite(bulkOps);
+        console.log(`[MarketCap Cache] Updated ${bulkOps.length} symbols in database`);
+      }
+    }
+
+    return resultMap;
   } catch (error) {
     console.error('getMarketCapCache error:', error);
-    return new Map();
+    // 回退到直接 API 调用
+    const quotesMap = await getBatchStockQuotes(symbols);
+    const fallbackMap = new Map();
+    quotesMap.forEach((data, symbol) => {
+      const marketCap = data.marketCap || (data.price || 1) * 1000000000;
+      fallbackMap.set(symbol, {
+        marketCap,
+        price: data.price || 0,
+        source: 'fallback',
+      });
+    });
+    return fallbackMap;
   }
 }
 
 /**
  * 获取初始报价快照（用于基准价格）
+ * 优先使用缓存的市值数据，报价数据实时获取
  */
 export async function getInitialQuotes(symbols: string[]): Promise<Map<string, {
   price: number;
@@ -129,16 +218,22 @@ export async function getInitialQuotes(symbols: string[]): Promise<Map<string, {
   }
 
   try {
-    const quotesMap = await getBatchStockQuotes(symbols);
+    // 并行获取报价和市值缓存
+    const [quotesMap, marketCapMap] = await Promise.all([
+      getBatchStockQuotes(symbols),
+      getMarketCapCache(symbols),
+    ]);
     
     const initialQuotes = new Map();
     quotesMap.forEach((data, symbol) => {
+      const cachedMarketCap = marketCapMap.get(symbol);
+      
       initialQuotes.set(symbol, {
         price: data.price || 0,
         change: data.change || 0,
         changePercent: data.changePercent || 0,
         volume: data.previousClose || 0, // 使用前收盘价作为基准
-        marketCap: data.marketCap || 0,
+        marketCap: cachedMarketCap?.marketCap || data.marketCap || 0,
       });
     });
 
