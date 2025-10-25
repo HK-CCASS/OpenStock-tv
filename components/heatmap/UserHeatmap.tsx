@@ -101,12 +101,14 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         };
       });
 
-      console.log('[Heatmap Debug] 获取到的 pools 数量:', pools.length);
-      console.log('[Heatmap Debug] Pools 详情:', pools.map(p => ({ 
+      const poolsInfo = pools.map(p => ({ 
         name: p.poolName, 
         stockCount: p.stockCount,
-        totalMarketCap: p.totalMarketCap 
-      })));
+        totalMarketCap: (p.totalMarketCap / 1000000000).toFixed(2) + 'B'
+      }));
+      
+      console.log('[Heatmap Debug] 获取到的 pools 数量:', pools.length);
+      console.log('[Heatmap Debug] Pools 详情:', JSON.stringify(poolsInfo, null, 2));
 
       setData({
         pools,
