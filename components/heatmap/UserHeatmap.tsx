@@ -101,6 +101,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         };
       });
 
+      console.log('[Heatmap Debug] 初始数据加载 - pools 数量:', pools.length);
+      console.log('[Heatmap Debug] 初始数据详情:', pools);
+      
       setData({
         pools,
         timestamp: new Date(),
@@ -290,6 +293,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       });
     } else {
       // 一级视图：显示所有池子
+      console.log('[Heatmap Debug] 一级视图 - pools 数量:', data.pools.length);
+      console.log('[Heatmap Debug] pools 详情:', data.pools.map(p => ({ name: p.poolName, stocks: p.stocks.length })));
+      
       treeData = data.pools.map((pool) => {
         return {
           name: pool.poolName,
@@ -312,6 +318,8 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           }),
         };
       });
+      
+      console.log('[Heatmap Debug] treeData 数量:', treeData.length);
     }
 
     const option = {
@@ -383,7 +391,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       },
       series: [
         {
-          name: 'Stock Market Heatmap',
+          name: '热力图',
           type: 'treemap',
           left: 0,
           right: 0,
@@ -518,7 +526,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           </button>
         )}
         <h1 className="text-white text-lg font-semibold">
-          {selectedPool ? selectedPool : '股票市场热力图'}
+          {selectedPool || '热力图'}
         </h1>
         
         {/* SSE 连接状态 */}
