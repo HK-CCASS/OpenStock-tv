@@ -83,11 +83,13 @@ Auth & Data
 - Better Auth (email/password) with MongoDB adapter
 - MongoDB + Mongoose
 - Finnhub API for symbols, profiles, and market news
-- TradingView embeddable widgets
+- TradingView embeddable widgets + WebSocket (real-time quotes)
+- ECharts (interactive visualizations)
 
 Automation & Comms
 - Inngest (events, cron, AI inference via Gemini)
 - Nodemailer (Gmail transport)
+- Server-Sent Events (SSE) for real-time data streaming
 - next-themes, cmdk (command palette), react-hook-form
 
 Language composition
@@ -103,11 +105,19 @@ Language composition
     - Popular stocks when idle; debounced querying
 - Watchlist
     - Per-user watchlist stored in MongoDB (unique symbol per user)
+    - Group management with category-based organization
 - Stock details
     - TradingView symbol info, candlestick/advanced charts, baseline, technicals
     - Company profile and financials widgets
 - Market overview
     - Heatmap, quotes, and top stories (TradingView widgets)
+- **Real-time Heatmap** 🆕
+    - Interactive treemap visualization based on user's watchlists
+    - Group stocks by category with automatic pool aggregation
+    - Live quote updates via TradingView WebSocket + SSE
+    - Real-time market cap calculation and color-coded performance
+    - TradingView-style 13-level color gradient
+    - Two-level drill-down (pools → stocks)
 - Personalized onboarding
     - Collects country, investment goals, risk tolerance, preferred industry
 - Email & automation
