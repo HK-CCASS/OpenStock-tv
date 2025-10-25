@@ -238,7 +238,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     // 添加点击事件处理（仅一级视图）
     if (!selectedPool) {
       chart.on('click', function (params: any) {
-        if (params.data.children && params.data.poolName) {
+        // 检查是否点击了pool（有poolName和poolData）
+        if (params.data.poolName && params.data.poolData) {
+          console.log('[Heatmap] 点击pool:', params.data.poolName);
           setSelectedPool(params.data.poolName);
         }
       });
