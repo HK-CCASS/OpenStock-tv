@@ -402,6 +402,8 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           roam: false,
           nodeClick: selectedPool ? false : 'link',  // 一级视图可点击，二级视图禁用
           squareRatio: 0.75,  // 优化小pool显示，值越小越接近正方形
+          visibleMin: 10,  // 最小可见面积（像素²），确保小pool也能显示
+          childrenVisibleMin: 5,  // 子节点最小可见面积
           breadcrumb: {
             show: false,
           },
