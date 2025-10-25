@@ -101,9 +101,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         };
       });
 
-      console.log('[Heatmap Debug] 初始数据加载 - pools 数量:', pools.length);
-      console.log('[Heatmap Debug] 初始数据详情:', pools);
-      
       setData({
         pools,
         timestamp: new Date(),
@@ -293,9 +290,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       });
     } else {
       // 一级视图：只显示池子层级，不显示children
-      console.log('[Heatmap Debug] 一级视图 - pools 数量:', data.pools.length);
-      console.log('[Heatmap Debug] pools 详情:', data.pools.map(p => ({ name: p.poolName, stocks: p.stocks.length })));
-      
       treeData = data.pools.map((pool) => {
         return {
           name: pool.poolName,
@@ -311,8 +305,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           // 一级视图不包含 children，这样 treemap 就会显示 pools 而不是自动钻入
         };
       });
-      
-      console.log('[Heatmap Debug] treeData 数量:', treeData.length);
     }
 
     const option = {
@@ -392,6 +384,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           bottom: 0,
           roam: false,
           nodeClick: selectedPool ? false : 'link',
+          squareRatio: 0.75,  // 优化小pool显示，值越小越接近正方形
           breadcrumb: {
             show: false,
           },
@@ -404,6 +397,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             show: true,
             formatter: function (params: any) {
               const stock = params.data.stockData;
+              const poolData = params.data.poolData;
+              
+              // 二级视图：显示股票信息
               if (stock) {
                 const changeSign = stock.changePercent >= 0 ? '+' : '';
                 return [
@@ -412,9 +408,21 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                   `{change|${changeSign}${stock.changePercent.toFixed(2)}%}`,
                 ].join('\n');
               }
+              
+              // 一级视图：显示pool信息
+              if (poolData && !selectedPool) {
+                const changeSign = poolData.avgChangePercent >= 0 ? '+' : '';
+                return [
+                  `{poolName|${params.name}}`,
+                  `{poolStats|${poolData.stockCount}只股票}`,
+                  `{poolChange|${changeSign}${poolData.avgChangePercent.toFixed(2)}%}`,
+                ].join('\n');
+              }
+              
               return '';
             },
             rich: {
+              // 股票标签样式
               symbol: {
                 fontSize: 14,
                 fontWeight: 'bold',
@@ -431,22 +439,30 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                 color: '#fff',
                 lineHeight: 16,
               },
+              // Pool标签样式
+              poolName: {
+                fontSize: 18,
+                fontWeight: 'bold',
+                color: '#fff',
+                lineHeight: 24,
+              },
+              poolStats: {
+                fontSize: 13,
+                color: '#ddd',
+                lineHeight: 20,
+              },
+              poolChange: {
+                fontSize: 14,
+                fontWeight: 'bold',
+                color: '#fff',
+                lineHeight: 20,
+              },
             },
             overflow: 'truncate',
             ellipsis: '...',
           },
           upperLabel: {
-            show: !selectedPool,
-            height: 36,
-            color: '#fff',
-            fontSize: 18,
-            fontWeight: 'bold',
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            borderColor: 'rgba(255, 255, 255, 0.3)',
-            borderWidth: 1,
-            borderRadius: 4,
-            padding: [8, 12],
-            formatter: '{b}',
+            show: false,  // 不显示upperLabel，统一使用label
           },
           levels: [
             {

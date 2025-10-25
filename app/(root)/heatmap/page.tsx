@@ -17,10 +17,7 @@ export default async function HeatmapPage() {
     redirect('/sign-in');
   }
 
-  return (
-    <div className="min-h-screen bg-[#131722]">
-      <UserHeatmap userId={session.user.id} />
-    </div>
-  );
+  // 直接返回组件，避免容器嵌套
+  return <UserHeatmap userId={session.user.id} />;
 }
 
