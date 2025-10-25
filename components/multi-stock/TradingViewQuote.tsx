@@ -19,10 +19,14 @@ export default function TradingViewQuote({ symbol, onPriceUpdate }: TradingViewQ
   useEffect(() => {
     if (!containerRef.current) return;
 
+    console.log(`[TradingViewQuote] 初始化隐藏 Widget 提取数据: ${symbol}`);
+    console.log('[TradingViewQuote] 注意: TradingView contentWindow 错误是正常的，可以忽略');
+
     // 创建 portal 容器
     const portalContainer = document.createElement('div');
     portalContainer.style.width = '300px';
     portalContainer.style.height = '200px';
+    portalContainer.style.overflow = 'hidden';
     portalContainerRef.current = portalContainer;
 
     containerRef.current.appendChild(portalContainer);
@@ -76,12 +80,28 @@ export default function TradingViewQuote({ symbol, onPriceUpdate }: TradingViewQ
       if (!portalContainerRef.current) return;
 
       try {
-        const fullText = portalContainerRef.current.textContent || '';
+        // 排除 style 和 script 标签，只获取实际数据
+        const clone = portalContainerRef.current.cloneNode(true) as HTMLElement;
+        
+        // 移除所有 style 和 script 标签
+        clone.querySelectorAll('style, script').forEach(el => el.remove());
+        
+        const fullText = clone.textContent || '';
+        
+        // 如果内容主要是 CSS 或为空，说明 Widget 还未加载完成
+        if (fullText.length < 20 || fullText.includes('tradingview-widget')) {
+          console.log(`[TradingViewQuote] ${symbol} Widget 还在加载中...`);
+          return false;
+        }
+        
+        // 调试：显示前200个字符
+        console.log(`[TradingViewQuote] ${symbol} Widget 数据内容:`, fullText.substring(0, 200));
 
-        // 提取价格
+        // 提取价格 - 改进的正则表达式
         const pricePatterns = [
-          /(?:^|\s)(\d{1,4}(?:,\d{3})*\.?\d{0,2})(?:\s|$)/,
-          /\$(\d{1,4}(?:,\d{3})*\.?\d{0,2})/,
+          /(\d{1,4}(?:,\d{3})*\.?\d{2,4})\s*[-+]/,  // 价格在涨跌符号前: "182.45 +"
+          /\$(\d{1,4}(?:,\d{3})*\.?\d{2,4})/,      // 带$符号: "$182.45"
+          /(?:^|\s)(\d{1,4}(?:,\d{3})*\.\d{2})(?:\s|$)/,  // 标准格式: "182.45"
         ];
 
         let price = 0;
@@ -89,8 +109,10 @@ export default function TradingViewQuote({ symbol, onPriceUpdate }: TradingViewQ
           const match = fullText.match(pattern);
           if (match) {
             const priceStr = match[1].replace(/,/g, '');
-            price = parseFloat(priceStr);
-            if (price > 0.01 && price < 1000000) {
+            const parsedPrice = parseFloat(priceStr);
+            if (parsedPrice > 0.01 && parsedPrice < 10000) {
+              price = parsedPrice;
+              console.log(`[TradingViewQuote] ${symbol} 提取价格: ${price} (使用模式: ${pattern})`);
               break;
             }
           }
@@ -107,20 +129,45 @@ export default function TradingViewQuote({ symbol, onPriceUpdate }: TradingViewQ
         const change = changeMatch ? parseFloat(changeMatch[1]) : 0;
 
         // 提取成交量
-        const volumePattern = /(?:Vol|Volume|V)[\s:]*(\d+\.?\d*)([KMB])?/i;
-        const volumeMatch = fullText.match(volumePattern);
+        const volumePatterns = [
+          /(?:Vol|Volume|V)[\s:]*(\d+\.?\d*)([KMB])/i,  // 标准格式: "Vol 38.25M"
+          /(\d+\.?\d*)([KMB])\s*(?:Vol|Volume)/i,       // 反向格式: "38.25M Vol"
+        ];
+        
         let volume = 0;
-        if (volumeMatch) {
-          const num = parseFloat(volumeMatch[1]);
-          const suffix = volumeMatch[2]?.toUpperCase();
-          volume = suffix === 'K' ? num * 1000 :
-                   suffix === 'M' ? num * 1000000 :
-                   suffix === 'B' ? num * 1000000000 : num;
+        for (const pattern of volumePatterns) {
+          const volumeMatch = fullText.match(pattern);
+          if (volumeMatch) {
+            const num = parseFloat(volumeMatch[1]);
+            const suffix = volumeMatch[2]?.toUpperCase();
+            volume = suffix === 'K' ? num * 1000 :
+                     suffix === 'M' ? num * 1000000 :
+                     suffix === 'B' ? num * 1000000000 : num;
+            console.log(`[TradingViewQuote] ${symbol} 提取成交量: ${volumeMatch[0]} → ${volume}`);
+            break;
+          }
         }
 
         if (price > 0) {
+          console.log(`[TradingViewQuote] ✅ ${symbol} 数据提取成功:`, {
+            price: `$${price}`,
+            change,
+            changePercent: `${changePercent}%`,
+            volume: volume > 0 ? `${(volume / 1000000).toFixed(2)}M` : '0',
+          });
           onPriceUpdate(symbol, price, change, changePercent, volume);
           return true;
+        } else {
+          // 只在多次尝试后仍失败时显示警告
+          if (extractAttempts > 5) {
+            console.warn(`[TradingViewQuote] ⚠️ ${symbol} 未提取到有效价格数据 (尝试 ${extractAttempts} 次)`);
+            console.warn(`[TradingViewQuote] ${symbol} Widget 数据长度: ${fullText.length}`);
+            if (fullText.length > 0 && fullText.length < 500) {
+              console.warn(`[TradingViewQuote] ${symbol} 完整内容:`, fullText);
+            } else if (fullText.length > 0) {
+              console.warn(`[TradingViewQuote] ${symbol} 前300个字符:`, fullText.substring(0, 300));
+            }
+          }
         }
         return false;
       } catch (error) {
@@ -131,7 +178,7 @@ export default function TradingViewQuote({ symbol, onPriceUpdate }: TradingViewQ
 
     // 使用MutationObserver监听DOM变化
     let extractAttempts = 0;
-    const maxAttempts = 20;
+    const maxAttempts = 30; // 增加最大尝试次数
     let successfulExtraction = false;
 
     const observer = new MutationObserver((mutations) => {
@@ -161,15 +208,16 @@ export default function TradingViewQuote({ symbol, onPriceUpdate }: TradingViewQ
       characterDataOldValue: false,
     });
 
-    // 多次尝试提取
+    // 多次尝试提取 - 增加重试次数和延迟
     const timers: NodeJS.Timeout[] = [];
-    [1000, 2000, 3000, 5000, 8000, 10000].forEach((delay) => {
+    [1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000, 15000].forEach((delay) => {
       const timer = setTimeout(() => {
         if (!successfulExtraction) {
           extractAttempts++;
           const success = extractQuoteData();
           if (success) {
             successfulExtraction = true;
+            console.log(`[TradingViewQuote] ✅ ${symbol} 在 ${delay}ms 后成功提取数据`);
           }
         }
       }, delay);
@@ -185,11 +233,12 @@ export default function TradingViewQuote({ symbol, onPriceUpdate }: TradingViewQ
           const parent = portalContainerRef.current.parentNode;
           parent.removeChild(portalContainerRef.current);
         } catch (e) {
-          console.debug('Portal cleanup warning:', e);
+          // 忽略清理错误
         }
       }
 
       portalContainerRef.current = null;
+      console.log(`[TradingViewQuote] 清理 Widget: ${symbol}`);
     };
   }, [symbol, onPriceUpdate]);
 
@@ -198,16 +247,18 @@ export default function TradingViewQuote({ symbol, onPriceUpdate }: TradingViewQ
       ref={containerRef}
       className="tradingview-quote-widget"
       style={{
-        position: 'fixed',
+        position: 'absolute',
         left: '-9999px',
         top: 0,
         width: '300px',
         height: '200px',
         opacity: 0,
         pointerEvents: 'none',
-        zIndex: -1,
+        zIndex: -9999,
+        visibility: 'hidden',
       }}
       aria-hidden="true"
+      role="presentation"
     />
   );
 }

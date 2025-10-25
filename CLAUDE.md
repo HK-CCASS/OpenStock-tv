@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run start` - 启动生产服务器
 - `npm run lint` - 运行 ESLint 检查
 - `npm run test:db` - 测试数据库连接
+- `npm run migrate:watchlist` - 迁移观察列表数据（使用 tsx）
 
 ### Inngest 本地开发
 - `npx inngest-cli@latest dev` - 启动 Inngest 本地开发服务器（工作流、定时任务、AI 推理）
@@ -35,6 +36,8 @@ app/                    # Next.js App Router
 ├── (auth)/            # 认证相关路由 (sign-in, sign-up)
 ├── (root)/            # 主要应用路由
 │   ├── stocks/[symbol]/ # 个股详情页
+│   ├── multi-stock/    # 多股同列页面
+│   ├── watchlists/     # 观察列表分组管理
 │   ├── api-docs/      # API 文档
 │   └── help/          # 帮助页面
 ├── api/inngest/       # Inngest API 路由
@@ -46,10 +49,13 @@ components/              # React 组件
 └── [其他业务组件]     # Header, Footer, SearchCommand 等
 
 lib/                   # 核心逻辑库
-├── actions/          # Server Actions (auth, finnhub, user, watchlist)
+├── actions/          # Server Actions (auth, finnhub, user, watchlist, watchlist-group)
+├── adapters/         # 适配器层 (multi-stock-adapter)
 ├── better-auth/      # Better Auth 配置
 ├── inngest/          # Inngest 客户端、函数、提示词
 ├── nodemailer/       # 邮件传输和模板
+├── types/           # TypeScript 类型定义
+├── constants.ts     # 常量定义
 └── utils.ts         # 工具函数
 
 database/              # 数据库相关
@@ -57,7 +63,8 @@ database/              # 数据库相关
 └── mongoose.ts      # 数据库连接
 
 scripts/              # 脚本文件
-└── test-db.mjs      # 数据库连接测试
+├── test-db.mjs      # 数据库连接测试
+└── migrate-watchlist.ts  # 数据迁移脚本
 ```
 
 ### 关键架构模式
@@ -71,11 +78,17 @@ scripts/              # 脚本文件
 - Server Actions 处理所有数据库操作和外部 API 调用
 - Finnhub API 提供股票搜索、公司资料、市场新闻
 - TradingView 嵌入式组件提供图表和市场视图
+- 适配器模式：`lib/adapters/multi-stock-adapter.ts` 处理多股票数据适配
 
 #### 自动化工作流 (Inngest)
 - 用户注册发送个性化欢迎邮件（AI 生成内容）
 - 每日新闻摘要邮件（定时任务，基于用户观察列表个性化）
 - AI 推理使用 Gemini 2.5 Flash Lite
+
+#### 观察列表管理
+- 支持分组功能：每个用户可创建多个观察列表分组
+- 数据模型：Watchlist（基础观察列表）+ WatchlistGroup（分组管理）
+- 迁移支持：`migrate-watchlist.ts` 用于数据结构升级
 
 #### UI 组件架构
 - 基于 shadcn/ui 和 Radix UI 原语构建
@@ -100,6 +113,7 @@ scripts/              # 脚本文件
 
 ### 数据库模型
 - Watchlist：用户观察列表，每个用户每个股票符号唯一
+- WatchlistGroup：观察列表分组，支持用户创建多个自定义分组
 
 ## 开发注意事项
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import StockTile from './StockTile';
 import LayoutControls from './LayoutControls';
+import TradingViewQuote from './TradingViewQuote';
 import { ChartType, Interval, TimeRange } from './TradingViewMiniChart';
 import type { StockQuote, SortOption, ColumnCount } from '@/lib/types/multi-stock.types';
 import type { WatchlistInfo } from '@/lib/adapters/multi-stock-adapter';
@@ -64,7 +65,7 @@ export default function StockGridController({
   const [globalTimeframe, setGlobalTimeframe] = useState<Interval>('5');
   const [globalTimeRange, setGlobalTimeRange] = useState<TimeRange>('1Y');
 
-  // Fetch real-time quotes from Finnhub
+  // Fetch real-time quotes from Finnhub (price + market cap)
   useEffect(() => {
     const fetchQuotes = async () => {
       console.log('[StockGridController] Fetching quotes from Finnhub...');
@@ -72,7 +73,7 @@ export default function StockGridController({
       const symbolList = symbols.map(s => s.symbol);
       const quotesMap = await getBatchStockQuotes(symbolList);
       
-      // 更新quotes状态
+      // 更新quotes状态（volume 将通过 TradingViewQuote 组件更新）
       const updatedQuotes = symbols.map(({ symbol, company }) => {
         const quoteData = quotesMap.get(symbol.toUpperCase());
         
@@ -83,7 +84,7 @@ export default function StockGridController({
             price: quoteData.price,
             change: quoteData.change,
             changePercent: quoteData.changePercent,
-            volume: 0, // Finnhub quote API不返回volume
+            volume: 0, // 将通过 TradingViewQuote 更新
             high: quoteData.high,
             low: quoteData.low,
             open: quoteData.open,
@@ -125,6 +126,28 @@ export default function StockGridController({
       setIsConnected(false);
     };
   }, [symbols]);
+
+  // 处理从 TradingView Widget 提取的数据更新
+  const handleQuoteUpdate = (symbol: string, price: number, change: number, changePercent: number, volume: number) => {
+    console.log(`[StockGridController] TradingView data for ${symbol}:`, { price, change, changePercent, volume });
+    
+    setQuotes(prevQuotes => 
+      prevQuotes.map(quote => {
+        if (quote.symbol.toUpperCase() === symbol.toUpperCase()) {
+          return {
+            ...quote,
+            // 更新成交量数据（从 TradingView 提取）
+            volume: volume,
+            // 可选：如果 Finnhub 数据还未加载，也更新价格数据
+            price: quote.price === 0 ? price : quote.price,
+            change: quote.change === 0 ? change : quote.change,
+            changePercent: quote.changePercent === 0 ? changePercent : quote.changePercent,
+          };
+        }
+        return quote;
+      })
+    );
+  };
 
   // Sort stocks based on selected option
   const sortedQuotes = useMemo(() => {
@@ -210,6 +233,15 @@ export default function StockGridController({
           ))}
         </div>
       )}
+
+      {/* 隐藏的 TradingView Quote Widgets 用于提取成交量数据 */}
+      {symbols.map(({ symbol }) => (
+        <TradingViewQuote
+          key={`quote-${symbol}`}
+          symbol={symbol}
+          onPriceUpdate={handleQuoteUpdate}
+        />
+      ))}
     </div>
   );
 }
