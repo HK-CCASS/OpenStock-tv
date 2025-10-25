@@ -220,9 +220,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     };
   }, [userId]);
 
-  // 当初始数据加载完成后，连接 SSE
+  // 当初始数据加载完成后，连接 SSE（只连接一次）
   useEffect(() => {
-    if (data && !loading) {
+    if (data && !loading && !eventSourceRef.current) {
       connectSSE();
     }
   }, [data, loading]);
