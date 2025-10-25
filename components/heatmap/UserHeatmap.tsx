@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 
 // 数据结构
 interface StockData {
@@ -53,6 +53,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   const [data, setData] = useState<HeatmapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPool, setSelectedPool] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -223,7 +224,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     }
   }, [data, loading]);
 
-  // 初始化 ECharts（只在首次加载时）
+  // 初始化 ECharts（只在首次或 selectedPool 改变时重建）
   useEffect(() => {
     if (!chartRef.current) return;
 
@@ -234,7 +235,15 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     const chart = echarts.init(chartRef.current);
     chartInstanceRef.current = chart;
 
-    // Finviz 风格不需要点击事件，直接显示所有层级
+    // 添加点击事件处理（仅一级视图）
+    if (!selectedPool) {
+      chart.on('click', function (params: any) {
+        // 检查是否点击了 pool（有 children）
+        if (params.data.children && params.data.poolName) {
+          setSelectedPool(params.data.poolName);
+        }
+      });
+    }
 
     const handleResize = () => {
       chart.resize();
@@ -250,7 +259,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         chartInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [selectedPool]);
 
   // 更新 ECharts 数据（当 data 变化时）
   useEffect(() => {
@@ -259,9 +268,17 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     const chart = chartInstanceRef.current;
 
     // 转换数据为 ECharts 格式
-    // Finviz 风格：显示完整的两层结构（pool + stocks）
-    const treeData = data.pools.map((pool) => {
-      const children = pool.stocks.map((stock) => {
+    let treeData;
+
+    if (selectedPool) {
+      // 二级视图：只显示选中 pool 的股票
+      const pool = data.pools.find((p) => p.poolName === selectedPool);
+      if (!pool) {
+        setSelectedPool(null);
+        return;
+      }
+
+      treeData = pool.stocks.map((stock) => {
         return {
           name: stock.symbol,
           value: stock.marketCap,
@@ -271,18 +288,32 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
         };
       });
+    } else {
+      // 一级视图：Finviz 风格，显示所有 pool + stocks
+      treeData = data.pools.map((pool) => {
+        const children = pool.stocks.map((stock) => {
+          return {
+            name: stock.symbol,
+            value: stock.marketCap,
+            stockData: stock,
+            itemStyle: {
+              color: getColorByChange(stock.changePercent),
+            },
+          };
+        });
 
-      return {
-        name: pool.poolName,
-        value: pool.totalMarketCap,
-        poolName: pool.poolName,
-        poolData: {
-          stockCount: pool.stockCount,
-          avgChangePercent: pool.avgChangePercent,
-        },
-        children,  // 包含 children，显示完整的两层结构
-      };
-    });
+        return {
+          name: pool.poolName,
+          value: pool.totalMarketCap,
+          poolName: pool.poolName,
+          poolData: {
+            stockCount: pool.stockCount,
+            avgChangePercent: pool.avgChangePercent,
+          },
+          children,  // 包含 children，显示完整的两层结构
+        };
+      });
+    }
 
     const option = {
       backgroundColor: '#1a1a1a',
@@ -326,8 +357,8 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             `;
           }
 
-          // Pool 信息
-          if (info.data.children) {
+          // Pool 信息（一级视图）
+          if (!selectedPool && info.data.children) {
             const poolData = info.data.poolData;
             const stockCount = poolData?.stockCount || info.data.children?.length || 0;
             const avgChange = poolData?.avgChangePercent || 0;
@@ -343,6 +374,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
                   平均涨跌幅: ${changeSign}${avgChange.toFixed(2)}%
                 </div>
                 <div style="color: #aaa; margin-top: 4px;">总市值: $${(totalValue / 1000000000).toFixed(2)}B</div>
+                <div style="color: #4CAF50; font-size: 11px; margin-top: 6px;">点击查看该板块详情</div>
               </div>
             `;
           }
@@ -359,7 +391,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           top: 0,
           bottom: 0,
           roam: false,
-          nodeClick: false,  // Finviz 风格，禁用点击钻取
+          nodeClick: selectedPool ? false : 'link',  // 一级视图可点击，二级视图禁用
           squareRatio: 0.75,  // 优化小pool显示，值越小越接近正方形
           breadcrumb: {
             show: false,
@@ -484,7 +516,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     setTimeout(() => {
       chart.resize();
     }, 0);
-  }, [data]);
+  }, [data, selectedPool]);
 
   if (error && !data) {
     return (
@@ -508,8 +540,17 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     <div className="w-full h-screen bg-[#1a1a1a] flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
       <div className="bg-[#1f1f1f] border-b border-[#2a2a2a] px-6 py-3 flex items-center gap-4 flex-shrink-0">
+        {selectedPool && (
+          <button
+            onClick={() => setSelectedPool(null)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#2a2a2a] text-white rounded hover:bg-[#333] transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            返回
+          </button>
+        )}
         <h1 className="text-white text-lg font-semibold">
-          股票市场热力图
+          {selectedPool || '股票市场热力图'}
         </h1>
         
         {/* SSE 连接状态 */}
