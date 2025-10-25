@@ -4,6 +4,10 @@
  */
 
 import { TradingViewTicker, TickerState } from './ticker';
+import { MockTradingViewTicker } from './mock-ticker';
+
+// 测试模式开关（设置环境变量 USE_MOCK_TICKER=true 启用）
+const USE_MOCK_TICKER = process.env.USE_MOCK_TICKER === 'true' || process.env.NODE_ENV === 'development';
 
 interface SSEClient {
   controller: ReadableStreamDefaultController;
@@ -109,10 +113,16 @@ class SSEManager {
     const allSymbols = Array.from(this.symbolSubscribers.keys());
     if (allSymbols.length === 0) return;
 
-    console.log(`[SSE] Starting TradingView Ticker with ${allSymbols.length} symbols`);
+    const tickerType = USE_MOCK_TICKER ? 'Mock Ticker' : 'TradingView Ticker';
+    console.log(`[SSE] Starting ${tickerType} with ${allSymbols.length} symbols`);
 
     try {
-      this.ticker = new TradingViewTicker(allSymbols, true);
+      // 根据配置选择 Ticker 类型
+      if (USE_MOCK_TICKER) {
+        this.ticker = new MockTradingViewTicker(allSymbols, true) as any;
+      } else {
+        this.ticker = new TradingViewTicker(allSymbols, true);
+      }
       
       // 设置更新回调
       this.ticker.onUpdate((symbol: string, state: TickerState) => {
@@ -123,9 +133,16 @@ class SSEManager {
       await this.ticker.start();
       this.isTickerRunning = true;
       
-      console.log('[SSE] TradingView Ticker started successfully');
+      // Mock Ticker 立即发送初始数据
+      if (USE_MOCK_TICKER && 'generateInitialUpdates' in this.ticker) {
+        setTimeout(() => {
+          (this.ticker as any).generateInitialUpdates();
+        }, 1000);
+      }
+      
+      console.log(`[SSE] ${tickerType} started successfully`);
     } catch (error) {
-      console.error('[SSE] Failed to start TradingView Ticker:', error);
+      console.error(`[SSE] Failed to start ${tickerType}:`, error);
       this.isTickerRunning = false;
       this.ticker = null;
     }
