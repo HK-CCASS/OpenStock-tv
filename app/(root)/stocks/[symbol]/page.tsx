@@ -1,5 +1,8 @@
 import TradingViewWidget from "@/components/TradingViewWidget";
 import WatchlistButton from "@/components/WatchlistButton";
+import { auth } from '@/lib/better-auth/auth';
+import { headers } from 'next/headers';
+import { isInWatchlist } from '@/lib/actions/watchlist.actions';
 import {
     SYMBOL_INFO_WIDGET_CONFIG,
     CANDLE_CHART_WIDGET_CONFIG,
@@ -12,6 +15,11 @@ import {
 export default async function StockDetails({ params }: StockDetailsPageProps) {
     const { symbol } = await params;
     const scriptUrl = `https://s3.tradingview.com/external-embedding/embed-widget-`;
+    
+    // 获取用户信息和watchlist状态
+    const session = await auth.api.getSession({ headers: await headers() });
+    const userId = session?.user?.id;
+    const stockInWatchlist = userId ? await isInWatchlist(userId, symbol) : false;
 
     return (
         <div className="flex min-h-screen p-4 md:p-6 lg:p-8">
@@ -42,7 +50,12 @@ export default async function StockDetails({ params }: StockDetailsPageProps) {
                 {/* Right column */}
                 <div className="flex flex-col gap-6">
                     <div className="flex items-center justify-between">
-                        <WatchlistButton symbol={symbol.toUpperCase()} company={symbol.toUpperCase()} isInWatchlist={false} />
+                        <WatchlistButton 
+                            symbol={symbol.toUpperCase()} 
+                            company={symbol.toUpperCase()} 
+                            isInWatchlist={stockInWatchlist}
+                            userId={userId}
+                        />
                     </div>
 
                     <TradingViewWidget

@@ -98,6 +98,106 @@ export async function getNews(symbols?: string[]): Promise<MarketNewsArticle[]> 
     }
 }
 
+/**
+ * 获取单个股票的实时报价
+ */
+export async function getStockQuote(symbol: string): Promise<{
+    c: number; // 当前价格
+    d: number; // 涨跌额
+    dp: number; // 涨跌幅
+    h: number; // 最高价
+    l: number; // 最低价
+    o: number; // 开盘价
+    pc: number; // 前一日收盘价
+} | null> {
+    try {
+        const token = process.env.FINNHUB_API_KEY ?? NEXT_PUBLIC_FINNHUB_API_KEY;
+        if (!token) {
+            console.error('FINNHUB API key is not configured');
+            return null;
+        }
+
+        const url = `${FINNHUB_BASE_URL}/quote?symbol=${encodeURIComponent(symbol.toUpperCase())}&token=${token}`;
+        // 缓存30秒
+        const quote = await fetchJSON<any>(url, 30);
+        
+        return quote;
+    } catch (error) {
+        console.error(`Error fetching quote for ${symbol}:`, error);
+        return null;
+    }
+}
+
+/**
+ * 获取股票公司信息（包含市值）
+ */
+async function getStockProfile(symbol: string): Promise<{
+    marketCap: number;
+} | null> {
+    try {
+        const token = process.env.FINNHUB_API_KEY ?? NEXT_PUBLIC_FINNHUB_API_KEY;
+        if (!token) {
+            return null;
+        }
+
+        const url = `${FINNHUB_BASE_URL}/stock/profile2?symbol=${encodeURIComponent(symbol.toUpperCase())}&token=${token}`;
+        // 缓存1小时（市值变化较慢）
+        const profile = await fetchJSON<any>(url, 3600);
+        
+        return {
+            marketCap: profile?.marketCapitalization || 0, // 单位：百万美元
+        };
+    } catch (error) {
+        console.error(`Error fetching profile for ${symbol}:`, error);
+        return null;
+    }
+}
+
+/**
+ * 批量获取股票报价（包含市值）
+ */
+export async function getBatchStockQuotes(symbols: string[]): Promise<Map<string, {
+    price: number;
+    change: number;
+    changePercent: number;
+    high: number;
+    low: number;
+    open: number;
+    previousClose: number;
+    marketCap: number;
+}>> {
+    const quotesMap = new Map();
+
+    // 并行获取所有股票的报价和公司信息
+    const results = await Promise.allSettled(
+        symbols.map(async (symbol) => {
+            const [quote, profile] = await Promise.all([
+                getStockQuote(symbol),
+                getStockProfile(symbol),
+            ]);
+            return { symbol, quote, profile };
+        })
+    );
+
+    results.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value.quote) {
+            const { symbol, quote, profile } = result.value;
+            quotesMap.set(symbol.toUpperCase(), {
+                price: quote.c || 0,
+                change: quote.d || 0,
+                changePercent: quote.dp || 0,
+                high: quote.h || 0,
+                low: quote.l || 0,
+                open: quote.o || 0,
+                previousClose: quote.pc || 0,
+                marketCap: (profile?.marketCap || 0) * 1000000, // 转换为美元（原数据单位是百万）
+            });
+        }
+    });
+
+    return quotesMap;
+}
+
 export const searchStocks = cache(async (query?: string): Promise<StockWithWatchlistStatus[]> => {
     try {
         const token = process.env.FINNHUB_API_KEY ?? NEXT_PUBLIC_FINNHUB_API_KEY;
