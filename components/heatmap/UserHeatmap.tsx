@@ -292,7 +292,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         };
       });
     } else {
-      // 一级视图：显示所有池子
+      // 一级视图：只显示池子层级，不显示children
       console.log('[Heatmap Debug] 一级视图 - pools 数量:', data.pools.length);
       console.log('[Heatmap Debug] pools 详情:', data.pools.map(p => ({ name: p.poolName, stocks: p.stocks.length })));
       
@@ -305,17 +305,10 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             stockCount: pool.stockCount,
             avgChangePercent: pool.avgChangePercent,
           },
-          children: pool.stocks.map((stock) => {
-            const marketCap = stock.marketCap || 0;
-            return {
-              name: stock.symbol,
-              value: marketCap,
-              stockData: stock,
-              itemStyle: {
-                color: getColorByChange(stock.changePercent),
-              },
-            };
-          }),
+          itemStyle: {
+            color: getColorByChange(pool.avgChangePercent),  // Pool 层级设置颜色
+          },
+          // 一级视图不包含 children，这样 treemap 就会显示 pools 而不是自动钻入
         };
       });
       
