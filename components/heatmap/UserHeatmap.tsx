@@ -101,6 +101,13 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         };
       });
 
+      console.log('[Heatmap Debug] 获取到的 pools 数量:', pools.length);
+      console.log('[Heatmap Debug] Pools 详情:', pools.map(p => ({ 
+        name: p.poolName, 
+        stockCount: p.stockCount,
+        totalMarketCap: p.totalMarketCap 
+      })));
+
       setData({
         pools,
         timestamp: new Date(),
