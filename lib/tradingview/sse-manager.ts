@@ -7,7 +7,8 @@ import { TradingViewTicker, TickerState } from './ticker';
 import { MockTradingViewTicker } from './mock-ticker';
 
 // 测试模式开关（设置环境变量 USE_MOCK_TICKER=true 启用）
-const USE_MOCK_TICKER = process.env.USE_MOCK_TICKER === 'true' || process.env.NODE_ENV === 'development';
+// 默认使用真实 TradingView Ticker，显式设置 USE_MOCK_TICKER=true 启用模拟数据
+const USE_MOCK_TICKER = process.env.USE_MOCK_TICKER === 'true';
 
 interface SSEClient {
   controller: ReadableStreamDefaultController;

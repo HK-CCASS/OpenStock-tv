@@ -42,12 +42,13 @@ Note: OpenStock is community-built and not a brokerage. Market data may be delay
 6. 🐳 [Docker Setup](#docker-setup)
 7. 🔐 [Environment Variables](#environment-variables)
 8. 🧱 [Project Structure](#project-structure)
-9. 📡 [Data & Integrations](#data--integrations)
-10. 🧪 [Scripts & Tooling](#scripts--tooling)
-11. 🤝 [Contributing](#contributing)
-12. 🛡️ [Security](#security)
-13. 📜 [License](#license)
-14. 🙏 [Acknowledgements](#acknowledgements)
+9. 🏗️ [Architecture](#architecture)
+10. 📡 [Data & Integrations](#data--integrations)
+11. 🧪 [Scripts & Tooling](#scripts--tooling)
+12. 🤝 [Contributing](#contributing)
+13. 🛡️ [Security](#security)
+14. 📜 [License](#license)
+15. 🙏 [Acknowledgements](#acknowledgements)
 
 ## ✨ Introduction
 
@@ -333,6 +334,41 @@ postcss.config.mjs      # Tailwind v4 postcss setup
 components.json         # shadcn config
 public/assets/images/   # logos and screenshots
 ```
+
+## 🏗️ Architecture
+
+OpenStock follows a modern, scalable architecture with clear separation of concerns:
+
+### System Overview
+- **Frontend**: Next.js 15 App Router + React 19
+- **Styling**: Tailwind CSS v4 + shadcn/ui
+- **Backend**: Server Actions + API Routes
+- **Database**: MongoDB + Mongoose ODM
+- **Real-time**: TradingView WebSocket + SSE streaming
+- **Automation**: Inngest workflows + Gemini AI
+
+### Key Modules
+1. **Authentication** - Better Auth with MongoDB adapter
+2. **Watchlist Management** - Group-based organization with category support
+3. **Real-time Heatmap** - TradingView WebSocket + SSE + ECharts visualization
+4. **Multi-Stock View** - Grid layout with TradingView mini charts
+5. **Stock Details** - Comprehensive TradingView widgets integration
+6. **Inngest Workflows** - AI-powered email automation
+
+### Real-time Data Flow
+```
+User → Heatmap Page → Initial Data API → MongoDB + Finnhub
+                   → SSE Connection → SSE Manager → TradingView Ticker
+                   → TradingView WebSocket → Real-time Quotes
+                   → SSE Push → Frontend → Calculate Market Cap → Update Chart
+```
+
+### Documentation
+- **Full Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Complete system architecture with Mermaid diagrams
+- **Heatmap Architecture**: [docs/architecture/heatmap-architecture.md](docs/architecture/heatmap-architecture.md)
+- **Heatmap Testing**: [docs/HEATMAP_TESTING_GUIDE.md](docs/HEATMAP_TESTING_GUIDE.md)
+- **Mock Ticker Usage**: [docs/MOCK_TICKER_USAGE.md](docs/MOCK_TICKER_USAGE.md)
+- **Watchlist Usage**: [docs/WATCHLIST_USAGE.md](docs/WATCHLIST_USAGE.md)
 
 ## 📡 Data & Integrations
 
