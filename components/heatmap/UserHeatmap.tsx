@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { AlertCircle, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
+import { StockDetailCard } from './StockDetailCard';
 
 // 数据结构
 interface StockData {
@@ -71,6 +72,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPool, setSelectedPool] = useState<string | null>(null);
+  const [selectedStock, setSelectedStock] = useState<StockData | null>(null); // 用于详情卡片
   const [sseConnected, setSseConnected] = useState(false);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -416,16 +418,39 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     };
   }, [data, loading]); // data 变化时重新连接（例如用户切换账号）
 
-  // 平方根平滑函数（温和压缩市值差异，保留更多细节）
+  // 分段平滑算法（智能处理不同规模的市值）
   const smoothValue = (marketCap: number): number => {
     if (marketCap <= 0) return 1;
-    // 使用平方根平滑：√marketCap
-    // 比对数温和，压缩极端值同时保留相对大小
-    // 例如：
-    //   线性：3T vs 100B = 30:1
-    //   对数：log(3T) vs log(100B) ≈ 3:1（太激进）
-    //   平方根：√(3T) vs √(100B) ≈ 5.5:1（适中）
-    return Math.sqrt(marketCap);
+    
+    // 市值阈值定义
+    const MEGA_CAP_THRESHOLD = 1000000000000;  // 1T（超大市值）
+    const LARGE_CAP_THRESHOLD = 500000000000;  // 500B（大市值）
+    const MID_CAP_THRESHOLD = 50000000000;     // 50B（中市值）
+    const SMALL_CAP_THRESHOLD = 10000000000;   // 10B（小市值）
+    
+    // 分段平滑策略
+    if (marketCap > MEGA_CAP_THRESHOLD) {
+      // 超大市值（> 1T）：激进压缩（立方根）
+      // 例如：3T → 1442, 1T → 1000
+      return Math.cbrt(marketCap) * 0.7;
+    } else if (marketCap > LARGE_CAP_THRESHOLD) {
+      // 大市值（500B-1T）：平方根压缩
+      // 例如：800B → 632, 500B → 500
+      return Math.sqrt(marketCap) * 0.9;
+    } else if (marketCap > MID_CAP_THRESHOLD) {
+      // 中市值（50B-500B）：平方根压缩（标准）
+      // 例如：100B → 316, 50B → 224
+      return Math.sqrt(marketCap);
+    } else if (marketCap > SMALL_CAP_THRESHOLD) {
+      // 小市值（10B-50B）：温和压缩
+      // 例如：30B → 240, 10B → 150
+      return Math.sqrt(marketCap) * 1.5;
+    } else {
+      // 微市值（< 10B）：线性放大
+      // 例如：5B → 100, 1B → 50
+      // 确保小股票也能看见
+      return (marketCap / 1000000000) * 50;  // 1B → 50px²
+    }
   };
 
   // 构建 ECharts 配置（提取为独立函数，便于维护）
@@ -763,8 +788,22 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
     // 添加点击事件处理
     const handleClick = (params: any) => {
-      // 只在一级视图且点击了 pool 时切换
-      if (!selectedPool && params.data.children && params.data.poolName) {
+      const stock = params.data.stockData;
+      
+      // 如果点击的是股票方块
+      if (stock) {
+        // Shift+Click 或 Ctrl+Click 打开详情卡片
+        if (params.event?.event?.shiftKey || params.event?.event?.ctrlKey || params.event?.event?.metaKey) {
+          setSelectedStock(stock);
+        }
+        // 普通点击：如果在二级视图，也打开详情卡片
+        else if (selectedPool) {
+          setSelectedStock(stock);
+        }
+        // 如果在一级视图，不做任何操作（保持 Finviz 风格）
+      }
+      // 如果点击的是 Pool（只在一级视图）
+      else if (!selectedPool && params.data.children && params.data.poolName) {
         setSelectedPool(params.data.poolName);
       }
     };
@@ -927,6 +966,15 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           </div>
         </div>
       </div>
+      
+      {/* 详情卡片弹窗 */}
+      {selectedStock && (
+        <StockDetailCard
+          stock={selectedStock}
+          userId={userId}
+          onClose={() => setSelectedStock(null)}
+        />
+      )}
     </div>
   );
 }
