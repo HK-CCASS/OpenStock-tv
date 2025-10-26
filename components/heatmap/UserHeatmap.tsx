@@ -568,19 +568,10 @@ export default function UserHeatmap({ userId }: { userId: string }) {
               if (!stock) return '';
               
               const sign = stock.changePercent >= 0 ? '+' : '';
-              const area = (params.rect?.width || 0) * (params.rect?.height || 0);
               
-              // 默认显示完整信息（股票名 + 股价 + 涨跌幅），只有极小方块才简化
-              if (area < 200) {
-                // 极小方块（< 200）：只显示股票名
-                return stock.symbol;
-              } else if (area < 350) {
-                // 小方块（200-350）：显示股票名和涨跌幅
-                return `${stock.symbol}\n${sign}${stock.changePercent.toFixed(2)}%`;
-              } else {
-                // 正常方块（>= 350）：显示完整信息
-                return `${stock.symbol}\n$${stock.last.toFixed(2)}\n${sign}${stock.changePercent.toFixed(2)}%`;
-              }
+              // 默认显示完整信息（股票名 + 股价 + 涨跌幅）
+              // 让 ECharts 自动处理文字溢出（overflow: 'truncate'）
+              return `${stock.symbol}\n$${stock.last.toFixed(2)}\n${sign}${stock.changePercent.toFixed(2)}%`;
             },
             rich: {
               symbolLarge: {
