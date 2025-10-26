@@ -931,50 +931,50 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         <div ref={chartRef} className="absolute inset-0" />
       </div>
 
-      {/* 图例说明 - TradingView风格渐变条 */}
-      <div className="bg-[#1f1f1f] border-t border-[#2a2a2a] px-6 py-4 flex-shrink-0">
-        <div className="flex flex-col items-center gap-3">
-          <span className="text-gray-400 text-sm">涨跌幅颜色</span>
+      {/* 图例说明 - TradingView风格渐变条（紧凑版）*/}
+      <div className="bg-[#1f1f1f] border-t border-[#2a2a2a] px-4 py-2 flex-shrink-0">
+        <div className="flex items-center justify-center gap-2">
+          <span className="text-gray-400 text-xs">涨跌幅颜色</span>
 
-          {/* 渐变色条 */}
-          <div className="flex items-center gap-0 h-8 rounded overflow-hidden shadow-lg">
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#E53935' }}>
+          {/* 渐变色条（缩小版）*/}
+          <div className="flex items-center gap-0 h-5 rounded overflow-hidden shadow">
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#E53935' }}>
               &lt;-5%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#D32F2F' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#D32F2F' }}>
               -4%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#C62828' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#C62828' }}>
               -3%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#B71C1C' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#B71C1C' }}>
               -2%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#8B1A1A' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#8B1A1A' }}>
               -1%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#5D1715' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#5D1715' }}>
               -0%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#424242' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#424242' }}>
               0%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#0D4D1C' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#0D4D1C' }}>
               +0%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#1B5E20' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#1B5E20' }}>
               +1%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#2E7D32' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#2E7D32' }}>
               +2%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#388E3C' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#388E3C' }}>
               +3%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#43A047' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#43A047' }}>
               +4%
             </div>
-            <div className="w-16 h-full flex items-center justify-center text-white text-xs" style={{ backgroundColor: '#4CAF50' }}>
+            <div className="w-12 h-full flex items-center justify-center text-white text-[10px]" style={{ backgroundColor: '#4CAF50' }}>
               &gt;5%
             </div>
           </div>
