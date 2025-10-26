@@ -4,6 +4,8 @@ import { connectToDatabase } from '@/database/mongoose';
 import { WatchlistGroup } from '@/database/models/watchlist-group.model';
 import { Watchlist } from '@/database/models/watchlist.model';
 import { getBatchStockQuotes } from './finnhub.actions';
+import { MarketCapCacheManager } from '@/lib/cache/market-cap-cache-manager';
+import { getBatchQuotesFromYahoo, isValidMarketCap } from './yahoo-finance.actions';
 
 interface PoolData {
   poolName: string;
@@ -89,8 +91,8 @@ export async function getUserHeatmapData(userId: string): Promise<{
 }
 
 /**
- * 获取市值缓存数据（MongoDB + API 回退）
- * 优先从数据库读取，如果缺失或过期则调用 API 并更新缓存
+ * 获取市值缓存数据（双层缓存 + 多数据源容错）
+ * 缓存层次：Redis (L1) → MongoDB (L2) → Yahoo Finance API → Finnhub API → 价格估算
  */
 export async function getMarketCapCache(symbols: string[]): Promise<Map<string, {
   marketCap: number;
@@ -102,92 +104,114 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
   }
 
   try {
-    await connectToDatabase();
-    const { MarketCap } = await import('@/database/models/market-cap.model');
-
-    const now = new Date();
     const normalizedSymbols = symbols.map(s => s.toUpperCase());
 
-    // 1. 从数据库查询有效缓存
-    const cachedData = await MarketCap.find({
-      symbol: { $in: normalizedSymbols },
-      validUntil: { $gt: now },
-    }).lean();
-
+    // 1️⃣ 从双层缓存读取（Redis + MongoDB）
+    const cachedData = await MarketCapCacheManager.getMultiple(normalizedSymbols);
+    
     const resultMap = new Map<string, { marketCap: number; price: number; source: string }>();
-    const cachedSymbols = new Set<string>();
-
-    // 2. 填充已缓存的数据
-    cachedData.forEach((item: any) => {
-      resultMap.set(item.symbol, {
-        marketCap: item.marketCap,
-        price: item.price,
-        source: item.source,
+    cachedData.forEach((data, symbol) => {
+      resultMap.set(symbol, {
+        marketCap: data.marketCap,
+        price: data.price,
+        source: data.source,
       });
-      cachedSymbols.add(item.symbol);
     });
 
-    // 3. 查找缺失或过期的股票代码
-    const missingSymbols = normalizedSymbols.filter(s => !cachedSymbols.has(s));
+    // 2️⃣ 查找缓存未命中的股票
+    const missingSymbols = normalizedSymbols.filter(s => !resultMap.has(s));
 
-    // 4. 如果有缺失的，从 API 获取并缓存
-    if (missingSymbols.length > 0) {
-      console.log(`[MarketCap Cache] Fetching ${missingSymbols.length} missing symbols from API`);
+    if (missingSymbols.length === 0) {
+      console.log(`[MarketCap Cache] ✅ All symbols cached (hit rate: 100%)`);
+      return resultMap;
+    }
+
+    console.log(
+      `[MarketCap Cache] Cache miss: ${missingSymbols.length} symbols | ` +
+      `Hit rate: ${((resultMap.size / normalizedSymbols.length) * 100).toFixed(1)}%`
+    );
+
+    // 3️⃣ 从 Yahoo Finance 获取缺失数据（批量最多 100 个）
+    const yahooQuotes = await fetchInBatches(missingSymbols, 100, getBatchQuotesFromYahoo);
+    const yahooSymbols = new Set(yahooQuotes.keys());
+    const remainingSymbols = missingSymbols.filter(s => !yahooSymbols.has(s));
+
+    // 4️⃣ Yahoo Finance 失败的股票，回退到 Finnhub
+    let finnhubQuotes = new Map();
+    if (remainingSymbols.length > 0) {
+      console.warn(
+        `[MarketCap Cache] Yahoo failed for ${remainingSymbols.length} symbols, falling back to Finnhub`
+      );
       
-      const quotesMap = await getBatchStockQuotes(missingSymbols);
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
+      finnhubQuotes = await fetchInBatches(remainingSymbols, 50, getBatchStockQuotes);
+    }
 
-      // 批量更新数据库
-      const bulkOps = Array.from(quotesMap.entries()).map(([symbol, data]) => {
-        let marketCap = data.marketCap || 0;
-        let source = 'finnhub';
+    // 5️⃣ 合并数据并写入缓存
+    const newCacheData = new Map();
 
-        // 如果市值无效，使用价格估算
-        if (marketCap <= 0) {
-          marketCap = (data.price || 1) * 1000000000;
-          source = 'fallback';
-          console.warn(
-            `[MarketCap Cache] ${symbol} 市值无效，使用回退值: ${(marketCap / 1000000000).toFixed(2)}B`
-          );
-        }
+    yahooQuotes.forEach((data, symbol) => {
+      let marketCap = data.marketCap || 0;
+      let source = 'yahoo';
 
-        // 添加到结果
-        resultMap.set(symbol, {
-          marketCap,
-          price: data.price || 0,
-          source,
-        });
+      if (!(await isValidMarketCap(marketCap))) {
+        marketCap = (data.price || 1) * 1000000000;
+        source = 'fallback';
+        console.warn(
+          `[MarketCap] ${symbol} 市值无效 (Yahoo: ${data.marketCap})，使用估算: ${(marketCap / 1e9).toFixed(2)}B`
+        );
+      }
 
-        // 准备数据库更新操作
-        return {
-          updateOne: {
-            filter: { symbol },
-            update: {
-              $set: {
-                marketCap,
-                price: data.price || 0,
-                source,
-                lastUpdated: now,
-                validUntil: tomorrow,
-              },
-            },
-            upsert: true,
-          },
-        };
+      const cacheEntry = {
+        marketCap,
+        price: data.price || 0,
+        source,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      resultMap.set(symbol, cacheEntry);
+      newCacheData.set(symbol, cacheEntry);
+    });
+
+    finnhubQuotes.forEach((data: any, symbol) => {
+      let marketCap = data.marketCap || 0;
+      let source = 'finnhub';
+
+      if (!(await isValidMarketCap(marketCap))) {
+        marketCap = (data.price || 1) * 1000000000;
+        source = 'fallback';
+      }
+
+      const cacheEntry = {
+        marketCap,
+        price: data.price || 0,
+        source,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      resultMap.set(symbol, cacheEntry);
+      newCacheData.set(symbol, cacheEntry);
+    });
+
+    // 6️⃣ 写入双层缓存
+    if (newCacheData.size > 0) {
+      await MarketCapCacheManager.setMultiple(newCacheData);
+      
+      const sourceStats = { yahoo: 0, finnhub: 0, fallback: 0 };
+      newCacheData.forEach((data: any) => {
+        sourceStats[data.source as keyof typeof sourceStats]++;
       });
 
-      if (bulkOps.length > 0) {
-        await MarketCap.bulkWrite(bulkOps);
-        console.log(`[MarketCap Cache] Updated ${bulkOps.length} symbols in database`);
-      }
+      console.log(
+        `[MarketCap Cache] ✅ Cached ${newCacheData.size} new symbols | ` +
+        `Yahoo: ${sourceStats.yahoo} | Finnhub: ${sourceStats.finnhub} | Fallback: ${sourceStats.fallback}`
+      );
     }
 
     return resultMap;
   } catch (error) {
-    console.error('getMarketCapCache error:', error);
-    // 回退到直接 API 调用
+    console.error('[MarketCap Cache] ❌ Critical error:', error);
+    
+    // 最终回退：直接调用 Finnhub
     const quotesMap = await getBatchStockQuotes(symbols);
     const fallbackMap = new Map();
     quotesMap.forEach((data, symbol) => {
@@ -200,6 +224,31 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
     });
     return fallbackMap;
   }
+}
+
+/**
+ * 分批处理辅助函数
+ */
+async function fetchInBatches<T>(
+  symbols: string[],
+  batchSize: number,
+  fetchFn: (symbols: string[]) => Promise<Map<string, T>>
+): Promise<Map<string, T>> {
+  const resultMap = new Map<string, T>();
+
+  for (let i = 0; i < symbols.length; i += batchSize) {
+    const batch = symbols.slice(i, i + batchSize);
+    try {
+      const batchResults = await fetchFn(batch);
+      batchResults.forEach((data, symbol) => {
+        resultMap.set(symbol, data);
+      });
+    } catch (error) {
+      console.error(`[Batch ${Math.floor(i / batchSize) + 1}] Failed:`, error);
+    }
+  }
+
+  return resultMap;
 }
 
 /**

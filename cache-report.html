@@ -1,0 +1,1734 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>市值缓存数据可视化 - OpenStock</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.9);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .stat-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .chart {
+            margin-top: 15px;
+        }
+
+        .bar {
+            margin-bottom: 10px;
+        }
+
+        .bar-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .bar-container {
+            background: #f0f0f0;
+            border-radius: 8px;
+            height: 30px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: bold;
+            font-size: 0.85em;
+            transition: width 1s ease;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-size: 0.9em;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.85em;
+        }
+
+        tr:hover {
+            background: #f5f5f5;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-valid {
+            background: #4caf50;
+            color: white;
+        }
+
+        .status-expired {
+            background: #f44336;
+            color: white;
+        }
+
+        .status-unavailable {
+            background: #ff9800;
+            color: white;
+        }
+
+        .source-yahoo { color: #7c3aed; font-weight: bold; }
+        .source-finnhub { color: #0891b2; font-weight: bold; }
+        .source-fallback { color: #dc2626; font-weight: bold; }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 市值缓存数据可视化</h1>
+        <div class="subtitle">生成时间: 10/26/2025, 8:11:17 PM</div>
+
+        <!-- 统计卡片 -->
+        <div class="grid">
+            <!-- MongoDB 统计 -->
+            <div class="card">
+                <div class="card-title">🗄️ MongoDB (L2 缓存)</div>
+                <div class="stat-box">
+                    <div class="stat-label">总缓存数量</div>
+                    <div class="stat-value">371</div>
+                </div>
+                <div class="stat-box" style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);">
+                    <div class="stat-label">有效缓存</div>
+                    <div class="stat-value">371</div>
+                </div>
+                <div class="stat-box" style="background: linear-gradient(135deg, #f44336 0%, #e53935 100%);">
+                    <div class="stat-label">过期缓存</div>
+                    <div class="stat-value">0</div>
+                </div>
+            </div>
+
+            <!-- Redis 统计 -->
+            <div class="card">
+                <div class="card-title">⚡ Redis (L1 缓存)</div>
+                
+                <div class="stat-box" style="background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);">
+                    <div class="stat-label">状态</div>
+                    <div class="stat-value">不可用</div>
+                </div>
+                <div style="padding: 15px; background: #fff3cd; border-radius: 8px; margin-top: 10px;">
+                    <p style="color: #856404; margin: 0; font-size: 0.9em;">
+                        ⚠️ Redis 未连接<br>
+                        运行: <code>docker compose up -d redis</code>
+                    </p>
+                </div>
+                
+            </div>
+
+            <!-- 性能指标 -->
+            <div class="card">
+                <div class="card-title">📈 性能指标</div>
+                <div class="stat-box">
+                    <div class="stat-label">L1 命中率 (Redis)</div>
+                    <div class="stat-value">0.0%</div>
+                </div>
+                <div class="stat-box" style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);">
+                    <div class="stat-label">L2 命中率 (MongoDB)</div>
+                    <div class="stat-value">100.0%</div>
+                </div>
+                <div class="stat-box" style="background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);">
+                    <div class="stat-label">总命中率</div>
+                    <div class="stat-value">50.0%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据源分布 -->
+        <div class="card">
+            <div class="card-title">📊 数据源分布</div>
+            <div class="chart">
+                
+                <div class="bar">
+                    <div class="bar-label">
+                        <span><strong>finnhub</strong></span>
+                        <span>370 条 (99.7%)</span>
+                    </div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: 99.7%">
+                            99.7%
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bar">
+                    <div class="bar-label">
+                        <span><strong>fallback</strong></span>
+                        <span>1 条 (0.3%)</span>
+                    </div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: 0.3%">
+                            0.3%
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+
+        <!-- MongoDB 缓存记录表 -->
+        <div class="card full-width">
+            <div class="card-title">📝 MongoDB 缓存记录（最近 100 条）</div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>状态</th>
+                            <th>股票代码</th>
+                            <th>市值 (美元)</th>
+                            <th>价格</th>
+                            <th>数据源</th>
+                            <th>最后更新</th>
+                            <th>有效期至</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>SHOP</strong></td>
+                                <td>$224.79B</td>
+                                <td>$172.95</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>GENI</strong></td>
+                                <td>$3.04B</td>
+                                <td>$12.03</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>DLR</strong></td>
+                                <td>$59.82B</td>
+                                <td>$179.28</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>DE</strong></td>
+                                <td>$127.80B</td>
+                                <td>$472.76</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>CCJ</strong></td>
+                                <td>$38.37B</td>
+                                <td>$88.13</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>NOC</strong></td>
+                                <td>$86.43B</td>
+                                <td>$605.58</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>BFLY</strong></td>
+                                <td>$0.56B</td>
+                                <td>$2.23</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ZM</strong></td>
+                                <td>$24.51B</td>
+                                <td>$84.28</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>META</strong></td>
+                                <td>$1854.73B</td>
+                                <td>$738.36</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ARM</strong></td>
+                                <td>$176.43B</td>
+                                <td>$170.68</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>LHX</strong></td>
+                                <td>$54.86B</td>
+                                <td>$293.20</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>MBLY</strong></td>
+                                <td>$11.04B</td>
+                                <td>$13.44</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>STXS</strong></td>
+                                <td>$0.28B</td>
+                                <td>$3.09</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>RBRK</strong></td>
+                                <td>$15.20B</td>
+                                <td>$76.99</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ESTC</strong></td>
+                                <td>$9.37B</td>
+                                <td>$88.20</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>TWST</strong></td>
+                                <td>$2.06B</td>
+                                <td>$34.11</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ARAY</strong></td>
+                                <td>$0.18B</td>
+                                <td>$1.57</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ARCT</strong></td>
+                                <td>$0.30B</td>
+                                <td>$11.22</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>MDB</strong></td>
+                                <td>$27.14B</td>
+                                <td>$333.57</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>NU</strong></td>
+                                <td>$76.33B</td>
+                                <td>$15.84</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>APLD</strong></td>
+                                <td>$9.35B</td>
+                                <td>$33.43</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>HOOD</strong></td>
+                                <td>$124.23B</td>
+                                <td>$139.79</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>DUOL</strong></td>
+                                <td>$14.30B</td>
+                                <td>$312.00</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>SOFI</strong></td>
+                                <td>$34.39B</td>
+                                <td>$29.01</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>HON</strong></td>
+                                <td>$137.23B</td>
+                                <td>$216.14</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>TER</strong></td>
+                                <td>$22.95B</td>
+                                <td>$144.28</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>QCOM</strong></td>
+                                <td>$182.29B</td>
+                                <td>$168.94</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>MOB</strong></td>
+                                <td>$0.04B</td>
+                                <td>$8.36</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>LMT</strong></td>
+                                <td>$112.32B</td>
+                                <td>$485.41</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>CVLT</strong></td>
+                                <td>$7.55B</td>
+                                <td>$169.92</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>MNDY</strong></td>
+                                <td>$10.02B</td>
+                                <td>$197.41</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>PEGA</strong></td>
+                                <td>$11.25B</td>
+                                <td>$66.27</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>TTD</strong></td>
+                                <td>$25.43B</td>
+                                <td>$52.00</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>APP</strong></td>
+                                <td>$209.71B</td>
+                                <td>$620.00</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>CLBT</strong></td>
+                                <td>$4.47B</td>
+                                <td>$18.66</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>RR</strong></td>
+                                <td>$1.21B</td>
+                                <td>$6.08</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>EXAS</strong></td>
+                                <td>$12.24B</td>
+                                <td>$64.64</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>BRZE</strong></td>
+                                <td>$3.12B</td>
+                                <td>$28.08</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>CERS</strong></td>
+                                <td>$0.29B</td>
+                                <td>$1.53</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>AMD</strong></td>
+                                <td>$410.45B</td>
+                                <td>$252.92</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>XRX</strong></td>
+                                <td>$0.40B</td>
+                                <td>$3.58</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>BTCS</strong></td>
+                                <td>$0.20B</td>
+                                <td>$4.07</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>TRMB</strong></td>
+                                <td>$19.38B</td>
+                                <td>$81.42</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>AAPL</strong></td>
+                                <td>$3900.35B</td>
+                                <td>$262.82</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>CYBR</strong></td>
+                                <td>$25.84B</td>
+                                <td>$511.93</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ZETA</strong></td>
+                                <td>$4.41B</td>
+                                <td>$18.79</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>AMZN</strong></td>
+                                <td>$2391.18B</td>
+                                <td>$224.21</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>CRWV</strong></td>
+                                <td>$66.05B</td>
+                                <td>$132.55</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>OKLO</strong></td>
+                                <td>$20.08B</td>
+                                <td>$136.05</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>GAME</strong></td>
+                                <td>$0.07B</td>
+                                <td>$0.70</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>BWXT</strong></td>
+                                <td>$18.58B</td>
+                                <td>$203.28</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>TSLA</strong></td>
+                                <td>$1442.18B</td>
+                                <td>$433.72</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>PYPL</strong></td>
+                                <td>$66.66B</td>
+                                <td>$69.77</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>IOT</strong></td>
+                                <td>$22.52B</td>
+                                <td>$39.25</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>AUR</strong></td>
+                                <td>$9.50B</td>
+                                <td>$5.15</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>GFAI</strong></td>
+                                <td>$0.02B</td>
+                                <td>$1.09</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>GE</strong></td>
+                                <td>$320.53B</td>
+                                <td>$303.87</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ADBE</strong></td>
+                                <td>$147.98B</td>
+                                <td>$353.52</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>CGNX</strong></td>
+                                <td>$8.12B</td>
+                                <td>$48.35</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>TDY</strong></td>
+                                <td>$24.95B</td>
+                                <td>$532.09</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>LIF</strong></td>
+                                <td>$7.36B</td>
+                                <td>$94.90</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>PTC</strong></td>
+                                <td>$24.53B</td>
+                                <td>$204.81</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>LFWD</strong></td>
+                                <td>$0.01B</td>
+                                <td>$0.65</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ESLT</strong></td>
+                                <td>$73.77B</td>
+                                <td>$491.71</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>CRM</strong></td>
+                                <td>$242.60B</td>
+                                <td>$254.83</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>RXRX</strong></td>
+                                <td>$2.63B</td>
+                                <td>$6.04</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>RTX</strong></td>
+                                <td>$239.53B</td>
+                                <td>$178.65</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>PLTR</strong></td>
+                                <td>$438.01B</td>
+                                <td>$184.63</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>DOCU</strong></td>
+                                <td>$14.38B</td>
+                                <td>$71.49</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>DDOG</strong></td>
+                                <td>$54.57B</td>
+                                <td>$156.47</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>BA</strong></td>
+                                <td>$167.38B</td>
+                                <td>$221.35</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>NET</strong></td>
+                                <td>$75.92B</td>
+                                <td>$217.85</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ICG</strong></td>
+                                <td>$0.09B</td>
+                                <td>$1.41</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>GTLB</strong></td>
+                                <td>$8.09B</td>
+                                <td>$48.53</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>TMO</strong></td>
+                                <td>$216.18B</td>
+                                <td>$572.50</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>RBLX</strong></td>
+                                <td>$88.53B</td>
+                                <td>$127.71</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>SAP</strong></td>
+                                <td>$282.44B</td>
+                                <td>$269.55</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ILMN</strong></td>
+                                <td>$15.39B</td>
+                                <td>$100.11</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>PRCT</strong></td>
+                                <td>$1.95B</td>
+                                <td>$34.99</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>SDGR</strong></td>
+                                <td>$1.66B</td>
+                                <td>$22.52</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>SNOW</strong></td>
+                                <td>$87.39B</td>
+                                <td>$257.94</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>JOBY</strong></td>
+                                <td>$14.30B</td>
+                                <td>$16.13</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>NVDA</strong></td>
+                                <td>$4526.12B</td>
+                                <td>$186.26</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>ACHR</strong></td>
+                                <td>$7.28B</td>
+                                <td>$11.29</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>TWLO</strong></td>
+                                <td>$17.27B</td>
+                                <td>$112.56</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>RDWR</strong></td>
+                                <td>$1.13B</td>
+                                <td>$26.50</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>INTC</strong></td>
+                                <td>$178.78B</td>
+                                <td>$38.28</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>INTU</strong></td>
+                                <td>$190.45B</td>
+                                <td>$683.09</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>SBET</strong></td>
+                                <td>$2.74B</td>
+                                <td>$13.92</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>NICE</strong></td>
+                                <td>$27.14B</td>
+                                <td>$132.30</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>VNET</strong></td>
+                                <td>$2.53B</td>
+                                <td>$9.62</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>SE</strong></td>
+                                <td>$92.51B</td>
+                                <td>$154.66</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>WRD</strong></td>
+                                <td>$2.88B</td>
+                                <td>$10.64</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>MSFT</strong></td>
+                                <td>$3892.04B</td>
+                                <td>$523.61</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>COIN</strong></td>
+                                <td>$91.07B</td>
+                                <td>$354.46</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>BTBT</strong></td>
+                                <td>$1.26B</td>
+                                <td>$3.91</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>BTCT</strong></td>
+                                <td>$0.02B</td>
+                                <td>$2.59</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>WDAY</strong></td>
+                                <td>$64.81B</td>
+                                <td>$242.75</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>PDYN</strong></td>
+                                <td>$0.35B</td>
+                                <td>$8.26</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                            <tr>
+                                <td>
+                                    <span class="status-badge status-valid">
+                                        ✅ 有效
+                                    </span>
+                                </td>
+                                <td><strong>SYM</strong></td>
+                                <td>$38.44B</td>
+                                <td>$65.10</td>
+                                <td class="source-finnhub">FINNHUB</td>
+                                <td>10/26/2025, 7:13:50 PM</td>
+                                <td>10/27/2025, 12:00:00 AM</td>
+                            </tr>
+                            
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        
+    </div>
+
+    <script>
+        // 动画效果
+        window.addEventListener('load', () => {
+            const bars = document.querySelectorAll('.bar-fill');
+            bars.forEach(bar => {
+                const width = bar.style.width;
+                bar.style.width = '0%';
+                setTimeout(() => {
+                    bar.style.width = width;
+                }, 100);
+            });
+        });
+    </script>
+</body>
+</html>

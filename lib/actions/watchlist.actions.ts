@@ -3,6 +3,7 @@
 import { connectToDatabase } from '@/database/mongoose';
 import { Watchlist } from '@/database/models/watchlist.model';
 import { getOrCreateDefaultGroup } from './watchlist-group.actions';
+import { getMarketCapCache } from './heatmap.actions';
 
 export async function getWatchlistSymbolsByEmail(email: string): Promise<string[]> {
     if (!email) return [];
@@ -29,7 +30,7 @@ export async function getWatchlistSymbolsByEmail(email: string): Promise<string[
 }
 
 /**
- * 添加股票到自选列表
+ * 添加股票到自选列表（并立即预缓存市值）
  * @param userId - 用户ID
  * @param symbol - 股票代码
  * @param company - 公司名称
@@ -48,7 +49,7 @@ export async function addToWatchlist(
     try {
         await connectToDatabase();
 
-        // 如果没有提供 groupId，获取或创建默认分组
+        // 1️⃣ 如果没有提供 groupId，获取或创建默认分组
         let targetGroupId = groupId;
         if (!targetGroupId) {
             targetGroupId = await getOrCreateDefaultGroup(userId);
@@ -57,7 +58,7 @@ export async function addToWatchlist(
             }
         }
 
-        // 使用 upsert 防止重复
+        // 2️⃣ 添加到 Watchlist 数据库
         await Watchlist.findOneAndUpdate(
             { userId, symbol: symbol.toUpperCase() },
             {
@@ -71,6 +72,16 @@ export async function addToWatchlist(
             },
             { upsert: true, new: true }
         );
+
+        // 3️⃣ 异步预缓存市值数据（不阻塞响应）
+        const normalizedSymbol = symbol.toUpperCase();
+        getMarketCapCache([normalizedSymbol])
+            .then(() => {
+                console.log(`[Watchlist] ✅ Pre-cached market cap for ${normalizedSymbol}`);
+            })
+            .catch((err) => {
+                console.warn(`[Watchlist] ⚠️ Pre-cache failed for ${normalizedSymbol}:`, err);
+            });
 
         return { success: true };
     } catch (error) {

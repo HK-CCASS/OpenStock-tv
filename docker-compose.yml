@@ -13,8 +13,8 @@ services:
     env_file:
       - .env
     environment:
+      NODE_ENV: production
       # Override environment variables here if needed
-      # NODE_ENV: production
       # USE_MOCK_TICKER: false  # Set to 'true' for testing without TradingView
     restart: unless-stopped
     depends_on:
@@ -52,6 +52,24 @@ services:
       retries: 5
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: openstock-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - openstock-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 networks:
   openstock-network:
     driver: bridge
@@ -60,4 +78,6 @@ volumes:
   mongo-data:
     driver: local
   mongo-config:
+    driver: local
+  redis-data:
     driver: local

@@ -38,8 +38,8 @@ const marketCapSchema = new Schema<IMarketCap>(
     source: {
       type: String,
       required: true,
-      enum: ['finnhub', 'iex', 'fallback'],
-      default: 'finnhub',
+      enum: ['yahoo', 'finnhub', 'iex', 'fallback'],
+      default: 'yahoo',
     },
     lastUpdated: {
       type: Date,

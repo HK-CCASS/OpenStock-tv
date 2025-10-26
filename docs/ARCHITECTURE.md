@@ -36,8 +36,10 @@ graph TB
 
     subgraph "基础设施层"
         Q[(MongoDB)]
+        Q2[(Redis)]
         R[TradingView API]
         S[Finnhub API]
+        S2[Yahoo Finance API]
         T[Gemini AI]
         U[Nodemailer]
     end
@@ -56,7 +58,9 @@ graph TB
     L --> T
     L --> U
     M --> Q
+    K --> Q2
     N --> S
+    N --> S2
     O --> R
     P --> O
 
@@ -64,6 +68,7 @@ graph TB
     style K fill:#4caf50
     style P fill:#66bb6a
     style Q fill:#00ed64
+    style Q2 fill:#ff6b6b
 ```
 
 ## 核心模块
@@ -140,6 +145,11 @@ sequenceDiagram
     participant U as 用户
     participant P as /heatmap Page
     participant D as /api/user-data
+    participant C as Market Cap Cache
+    participant R as Redis (L1)
+    participant DB as MongoDB (L2)
+    participant Y as Yahoo Finance
+    participant F as Finnhub
     participant S as /api/stream (SSE)
     participant M as SSE Manager
     participant T as TradingView Ticker
@@ -147,7 +157,30 @@ sequenceDiagram
 
     U->>P: 访问热力图
     P->>D: 获取初始数据
+    D->>C: getMarketCapCache()
+    
+    alt L1 缓存命中
+        C->>R: 查询 Redis
+        R-->>C: 返回市值 (~1-2ms)
+    else L2 缓存命中
+        C->>DB: 查询 MongoDB
+        DB-->>C: 返回市值 (~10-20ms)
+        C->>R: 回写 Redis
+    else 缓存未命中
+        C->>Y: Yahoo Finance API
+        alt Yahoo 成功
+            Y-->>C: 返回市值 (~300ms)
+        else Yahoo 失败
+            C->>F: Finnhub API (回退)
+            F-->>C: 返回市值 (~500ms)
+        end
+        C->>R: 写入 Redis
+        C->>DB: 写入 MongoDB
+    end
+    
+    C-->>D: 返回市值数据
     D-->>P: {pools, cells, marketCap}
+    
     P->>S: 连接 SSE
     S->>M: subscribeClient
     M->>T: 启动 Ticker
@@ -163,6 +196,9 @@ sequenceDiagram
 **核心特性**:
 - ✅ 基于用户观察列表
 - ✅ 按 category 分组（Pool 聚合）
+- ✅ **双层缓存架构（Redis + MongoDB）** 🆕
+- ✅ **多数据源容错（Yahoo Finance → Finnhub → 价格估算）** 🆕
+- ✅ **智能预缓存（添加股票时异步预热）** 🆕
 - ✅ TradingView WebSocket 实时报价
 - ✅ SSE 流式推送
 - ✅ 实时市值计算
@@ -176,11 +212,18 @@ sequenceDiagram
 - `lib/tradingview/sse-manager.ts` - SSE 连接管理
 - `app/api/heatmap/stream/route.ts` - SSE API
 - `app/api/heatmap/user-data/route.ts` - 初始数据 API
+- `lib/actions/heatmap.actions.ts` - 市值缓存逻辑 🆕
+- `lib/cache/market-cap-cache-manager.ts` - 双层缓存管理器 🆕
+- `lib/actions/yahoo-finance.actions.ts` - Yahoo Finance 适配器 🆕
+- `lib/redis/client.ts` - Redis 客户端 🆕
 
 **数据流**:
 1. 查询用户 WatchlistGroups 和 Watchlists
 2. 按 category/name 分组为 Pools
-3. 调用 Finnhub API 获取市值基准
+3. **市值缓存查询（三层回退）**：
+   - L1: Redis 查询（~1-2ms，命中率 ~90%）
+   - L2: MongoDB 查询（~10-20ms，命中率 ~8%）
+   - L3: API 调用（Yahoo Finance → Finnhub → 价格估算）
 4. TradingView WebSocket 获取实时报价
 5. SSE 推送到前端
 6. 前端计算实时市值并更新图表
@@ -281,9 +324,13 @@ graph LR
 | 技术 | 版本 | 用途 |
 |------|------|------|
 | Better Auth | Latest | 认证系统 |
-| MongoDB | 7 | 数据库 |
+| MongoDB | 7 | 数据库（L2 缓存 + 持久化） |
 | Mongoose | Latest | ODM |
-| Finnhub API | - | 股票数据 |
+| Redis | 7 | 缓存（L1 高速缓存） 🆕 |
+| ioredis | Latest | Redis 客户端 🆕 |
+| Yahoo Finance | - | 股票数据（主数据源） 🆕 |
+| yahoo-finance2 | Latest | Yahoo Finance SDK 🆕 |
+| Finnhub API | - | 股票数据（备用数据源） |
 | TradingView | - | 图表组件 + WebSocket |
 | Inngest | Latest | 工作流引擎 |
 | Gemini AI | 2.5 Flash | AI 内容生成 |
@@ -417,11 +464,21 @@ OpenStock/
 页面加载 → 获取初始数据
     ├─ WatchlistGroups (MongoDB)
     ├─ Watchlists (MongoDB)
-    └─ 市值基准 (Finnhub API)
+    └─ 市值缓存（三层架构）🆕
+          ├─ L1: Redis 查询（~1-2ms，命中率 ~90%）
+          ├─ L2: MongoDB 查询（~10-20ms，命中率 ~8%）
+          └─ L3: API 调用（~300-500ms，命中率 ~2%）
+                ├─ Yahoo Finance（主数据源，批量 100 支）
+                ├─ Finnhub（备用数据源，批量 50 支）
+                └─ 价格估算（最终回退：price × 10亿）
 
 SSE 连接 → SSE Manager → TradingView Ticker → TradingView WebSocket
     ↓
 实时报价更新 → 广播到所有客户端 → 前端计算实时市值 → 更新 ECharts
+
+用户添加股票 → Watchlist 数据库 → 异步预缓存市值 🆕
+    ├─ 调用 Yahoo Finance API
+    └─ 写入 Redis + MongoDB
 ```
 
 ### 4. Inngest 工作流
@@ -508,6 +565,11 @@ graph TB
    - Mongoose lean()
 
 2. **API 优化**:
+   - **双层缓存（Redis L1 + MongoDB L2）** 🆕
+   - **多数据源容错（Yahoo Finance → Finnhub → 价格估算）** 🆕
+   - **智能预缓存（添加股票时异步预热）** 🆕
+   - **批量请求优化（Yahoo Finance 100 支/批，Finnhub 50 支/批）** 🆕
+   - **定时任务预热（每天美股收盘后 UTC 21:30）** 🆕
    - 批量请求（Finnhub）
    - 响应缓存
    - SSE 流式传输
@@ -625,7 +687,8 @@ graph TB
 ### 短期目标
 
 - [ ] 添加单元测试覆盖
-- [ ] 实现 Redis 缓存层
+- [x] 实现 Redis 缓存层 ✅ **已完成（2025-10-26）**
+- [x] 集成 Yahoo Finance 数据源 ✅ **已完成（2025-10-26）**
 - [ ] 添加更多图表类型
 - [ ] 优化移动端体验
 
@@ -657,7 +720,11 @@ OpenStock 采用现代化的技术栈和架构设计，实现了：
 
 ---
 
-**最后更新**: 2025-10-25  
-**版本**: 1.0.0  
+**最后更新**: 2025-10-26  
+**版本**: 2.0.0  
 **作者**: Open Dev Society
+
+**变更历史**:
+- v2.0.0 (2025-10-26)：添加双层缓存架构（Redis + MongoDB）、集成 Yahoo Finance、优化市值数据获取流程
+- v1.0.0 (2025-10-25)：初始版本
 

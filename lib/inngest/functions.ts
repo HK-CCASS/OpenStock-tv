@@ -121,12 +121,18 @@ export const sendDailyNewsSummary = inngest.createFunction(
 )
 
 /**
- * 每天更新市值缓存
- * 运行时间：每天凌晨 2 点（UTC）
+ * 每天美股收盘后更新市值缓存
+ * 运行时间：每天 UTC 21:30（美东时间 16:30/17:30，收盘后 30-90 分钟）
+ * 
+ * 时间说明：
+ * - 美股收盘：美东时间 16:00
+ * - 夏令时（3-11月）：UTC 20:00 → 定时任务 UTC 21:30 = 收盘后 90 分钟
+ * - 冬令时（11-3月）：UTC 21:00 → 定时任务 UTC 21:30 = 收盘后 30 分钟
+ * - 对应北京时间：次日 05:30
  */
 export const updateMarketCapCache = inngest.createFunction(
     { id: 'update-market-cap-cache' },
-    [{ event: 'app/update.market.cap' }, { cron: '0 2 * * *' }],
+    [{ event: 'app/update.market.cap' }, { cron: '30 21 * * 1-5' }],  // 周一到周五 UTC 21:30
     async ({ step }) => {
         // Step #1: 获取所有观察列表的股票代码
         const symbols = await step.run('get-all-symbols', getAllWatchlistSymbols);
@@ -137,8 +143,8 @@ export const updateMarketCapCache = inngest.createFunction(
 
         console.log(`[Market Cap Update] Found ${symbols.length} unique symbols to update`);
 
-        // Step #2: 批量更新市值缓存（分批处理，每批 50 个）
-        const batchSize = 50;
+        // Step #2: 批量更新市值缓存（分批处理，每批 100 个）
+        const batchSize = 100;
         const batches = [];
         for (let i = 0; i < symbols.length; i += batchSize) {
             batches.push(symbols.slice(i, i + batchSize));
