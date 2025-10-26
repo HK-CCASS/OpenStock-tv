@@ -644,9 +644,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
           upperLabel: {
             show: true,
-            height: 24,                            // 减小高度（30 → 24）
+            height: 20,                            // 再次减小高度（24 → 20）
             color: '#ffffff',
-            fontSize: 11,                          // 减小字体（14 → 11）
+            fontSize: 10,                          // 再次减小字体（11 → 10）
             fontWeight: 'bold',
             backgroundColor: 'rgba(0, 0, 0, 0.7)', // 半透明背景
             borderColor: 'rgba(255, 255, 255, 0.2)', // 细边框
