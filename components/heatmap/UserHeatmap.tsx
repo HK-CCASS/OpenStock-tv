@@ -670,15 +670,15 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
           upperLabel: {
             show: true,
-            height: 30,                            // 标准高度
+            height: 24,                            // 减小高度（30 → 24）
             color: '#ffffff',
-            fontSize: 14,                          // 标准字体
+            fontSize: 11,                          // 减小字体（14 → 11）
             fontWeight: 'bold',
             backgroundColor: 'rgba(0, 0, 0, 0.7)', // 半透明背景
             borderColor: 'rgba(255, 255, 255, 0.2)', // 细边框
             borderWidth: 1,                         // 细边框
             borderRadius: 4,                        // 圆角
-            padding: [6, 10],                      // 标准内边距
+            padding: [4, 8],                      // 减小内边距（[6, 10] → [4, 8]）
             shadowBlur: 0,                         // 禁用阴影（性能优化）
             shadowColor: 'rgba(0, 0, 0, 0)',
             shadowOffsetY: 0,
