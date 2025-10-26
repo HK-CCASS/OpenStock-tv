@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
 import { AlertCircle, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
 import { StockDetailCard } from './StockDetailCard';
@@ -105,76 +105,66 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       // 批量应用所有更新
       if (updates.length > 0) {
         console.log(`[Update] Processing ${updates.length} stock updates`);
-        batchUpdateStockQuotes(updates);
+        // 直接调用（不需要依赖，因为 batchUpdateStockQuotes 是稳定的）
+        setData((prevData) => {
+          if (!prevData) return prevData;
+
+          // 构建 symbol -> update 映射，快速查找
+          const updateMap = new Map(updates.map(u => [u.symbol, u]));
+          let hasChanges = false;
+
+          const updatedPools = prevData.pools.map((pool) => {
+            let poolChanged = false;
+            const updatedStocks = pool.stocks.map((stock) => {
+              const update = updateMap.get(stock.symbol);
+              if (update) {
+                poolChanged = true;
+                hasChanges = true;
+
+                // 计算实时市值
+                const realTimeMarketCap = stock.marketCapBase && stock.priceBase
+                  ? stock.marketCapBase * (update.price / stock.priceBase)
+                  : stock.marketCap || 0;
+
+                return {
+                  ...stock,
+                  last: update.price,
+                  change: update.change,
+                  changePercent: update.changePercent,
+                  volume: update.volume,
+                  marketCap: realTimeMarketCap,
+                };
+              }
+              return stock;
+            });
+
+            // 如果该 pool 有变化，重新计算统计
+            if (poolChanged) {
+              const totalMarketCap = updatedStocks.reduce((sum, s) => sum + (s.marketCap || 0), 0);
+              const avgChangePercent = updatedStocks.length > 0
+                ? updatedStocks.reduce((sum, s) => sum + s.changePercent, 0) / updatedStocks.length
+                : 0;
+
+              return {
+                ...pool,
+                stocks: updatedStocks,
+                totalMarketCap,
+                avgChangePercent,
+              };
+            }
+
+            return pool; // 无变化，保持引用
+          });
+
+          // 如果有任何变化，返回新状态
+          return hasChanges ? {
+            pools: updatedPools,
+            timestamp: new Date(),
+          } : prevData;
+        });
       }
     });
-  }, []);
-
-  // 批量更新股票报价（优化版：一次性更新多个股票）
-  const batchUpdateStockQuotes = (updates: Array<{
-    symbol: string;
-    price: number;
-    change: number;
-    changePercent: number;
-    volume: number;
-  }>) => {
-    setData((prevData) => {
-      if (!prevData) return prevData;
-
-      // 构建 symbol -> update 映射，快速查找
-      const updateMap = new Map(updates.map(u => [u.symbol, u]));
-      let hasChanges = false;
-
-      const updatedPools = prevData.pools.map((pool) => {
-        let poolChanged = false;
-        const updatedStocks = pool.stocks.map((stock) => {
-          const update = updateMap.get(stock.symbol);
-          if (update) {
-            poolChanged = true;
-            hasChanges = true;
-
-            // 计算实时市值
-            const realTimeMarketCap = stock.marketCapBase && stock.priceBase
-              ? stock.marketCapBase * (update.price / stock.priceBase)
-              : stock.marketCap || 0;
-
-            return {
-              ...stock,
-              last: update.price,
-              change: update.change,
-              changePercent: update.changePercent,
-              volume: update.volume,
-              marketCap: realTimeMarketCap,
-            };
-          }
-          return stock;
-        });
-
-        // 如果该 pool 有变化，重新计算统计
-        if (poolChanged) {
-          const totalMarketCap = updatedStocks.reduce((sum, s) => sum + (s.marketCap || 0), 0);
-          const avgChangePercent = updatedStocks.length > 0
-            ? updatedStocks.reduce((sum, s) => sum + s.changePercent, 0) / updatedStocks.length
-            : 0;
-
-          return {
-            ...pool,
-            stocks: updatedStocks,
-            totalMarketCap,
-            avgChangePercent,
-          };
-        }
-
-        return pool; // 无变化，保持引用
-      });
-
-      // 如果有任何变化，返回新状态
-      return hasChanges ? {
-        pools: updatedPools,
-        timestamp: new Date(),
-      } : prevData;
-    });
-  };
+  }, []); // 不需要依赖
 
   // 获取初始数据
   const fetchInitialData = async () => {
@@ -775,21 +765,26 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     };
   }, []); // 只在挂载时执行一次
 
-  // 更新 ECharts 数据（当 data、selectedPool 或 displayMode 变化时）
+  // 使用 useMemo 缓存 chartOption（避免每次 render 都重新计算）
+  const chartOption = useMemo(() => {
+    if (!data) return null;
+    return buildChartOption(data, selectedPool, displayMode);
+  }, [data, selectedPool, displayMode]);
+
+  // 更新 ECharts 数据（当 chartOption 变化时）
   useEffect(() => {
-    if (!chartInstanceRef.current || !data) return;
+    if (!chartInstanceRef.current || !chartOption) return;
 
     const chart = chartInstanceRef.current;
-    const option = buildChartOption(data, selectedPool, displayMode);
 
-    if (!option) {
+    if (!chartOption) {
       // 如果选中的 pool 不存在，返回一级视图
       setSelectedPool(null);
       return;
     }
 
     // 使用优化的配置参数
-    chart.setOption(option, {
+    chart.setOption(chartOption, {
       notMerge: false,  // 使用增量更新，提升性能
       lazyUpdate: false, // 禁用批量更新，确保实时响应
       silent: false,    // 允许触发事件（用户交互）
@@ -799,7 +794,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     setTimeout(() => {
       chart.resize();
     }, 0);
-  }, [data, selectedPool, displayMode]);
+  }, [chartOption]);
 
   if (error && !data) {
     return (
