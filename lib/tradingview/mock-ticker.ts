@@ -35,19 +35,108 @@ export class MockTradingViewTicker {
    */
   private getBasePrice(symbol: string): number {
     const priceMap: Record<string, number> = {
-      'NASDAQ:AAPL': 180,
-      'NASDAQ:MSFT': 380,
-      'NASDAQ:GOOGL': 140,
-      'NASDAQ:TSLA': 250,
-      'NASDAQ:META': 470,
-      'NASDAQ:NVDA': 500,
-      'NASDAQ:AMZN': 175,
-      'NASDAQ:NFLX': 450,
-      'NYSE:JPM': 150,
-      'NYSE:BAC': 35,
-      'NYSE:WFC': 45,
-      'NYSE:GS': 400,
-      'NYSE:DIS': 95,
+      // 科技股 (NASDAQ) - 大盘股
+      'NASDAQ:AAPL': 180,   // Apple
+      'NASDAQ:MSFT': 380,   // Microsoft
+      'NASDAQ:GOOGL': 140,  // Google (Class A)
+      'NASDAQ:GOOG': 140,   // Google (Class C)
+      'NASDAQ:AMZN': 175,   // Amazon
+      'NASDAQ:META': 470,   // Meta (Facebook)
+      'NASDAQ:NVDA': 500,   // NVIDIA
+      'NASDAQ:TSLA': 250,   // Tesla
+      'NASDAQ:NFLX': 450,   // Netflix
+      
+      // 科技股 (NASDAQ) - 中大盘股
+      'NASDAQ:AMD': 140,    // AMD
+      'NASDAQ:INTC': 45,    // Intel
+      'NASDAQ:AVGO': 900,   // Broadcom
+      'NASDAQ:ADBE': 580,   // Adobe
+      'NASDAQ:CRM': 220,    // Salesforce
+      'NASDAQ:ORCL': 115,   // Oracle
+      'NASDAQ:CSCO': 50,    // Cisco
+      'NASDAQ:QCOM': 175,   // Qualcomm
+      'NASDAQ:TXN': 180,    // Texas Instruments
+      'NASDAQ:INTU': 620,   // Intuit
+      
+      // 科技股 (NASDAQ) - 中小盘股
+      'NASDAQ:PYPL': 65,    // PayPal
+      'NASDAQ:SHOP': 80,    // Shopify
+      'NASDAQ:COIN': 185,   // Coinbase
+      'NASDAQ:ROKU': 75,    // Roku
+      'NASDAQ:DDOG': 110,   // Datadog
+      'NASDAQ:SNOW': 175,   // Snowflake
+      'NASDAQ:ZM': 70,      // Zoom
+      'NASDAQ:DOCU': 60,    // DocuSign
+      'NASDAQ:CRWD': 260,   // CrowdStrike
+      'NASDAQ:PANW': 280,   // Palo Alto Networks
+      
+      // 金融股 (NYSE)
+      'NYSE:JPM': 150,      // JPMorgan Chase
+      'NYSE:BAC': 35,       // Bank of America
+      'NYSE:WFC': 45,       // Wells Fargo
+      'NYSE:GS': 400,       // Goldman Sachs
+      'NYSE:MS': 85,        // Morgan Stanley
+      'NYSE:C': 55,         // Citigroup
+      'NYSE:BLK': 750,      // BlackRock
+      'NYSE:SCHW': 65,      // Charles Schwab
+      'NYSE:AXP': 180,      // American Express
+      'NYSE:V': 265,        // Visa
+      'NYSE:MA': 450,       // Mastercard
+      
+      // 消费股
+      'NYSE:WMT': 165,      // Walmart
+      'NYSE:HD': 350,       // Home Depot
+      'NYSE:KO': 60,        // Coca-Cola
+      'NYSE:PEP': 175,      // PepsiCo
+      'NYSE:MCD': 290,      // McDonald's
+      'NASDAQ:SBUX': 95,    // Starbucks
+      'NYSE:NKE': 105,      // Nike
+      'NYSE:DIS': 95,       // Disney
+      'NYSE:TGT': 150,      // Target
+      'NYSE:COST': 730,     // Costco
+      
+      // 医疗健康股
+      'NYSE:JNJ': 165,      // Johnson & Johnson
+      'NYSE:UNH': 520,      // UnitedHealth
+      'NYSE:PFE': 30,       // Pfizer
+      'NYSE:ABBV': 170,     // AbbVie
+      'NYSE:TMO': 540,      // Thermo Fisher
+      'NYSE:ABT': 110,      // Abbott Laboratories
+      'NYSE:MRK': 115,      // Merck
+      'NYSE:LLY': 780,      // Eli Lilly
+      'NASDAQ:AMGN': 290,   // Amgen
+      'NASDAQ:GILD': 75,    // Gilead
+      
+      // 能源股
+      'NYSE:XOM': 110,      // ExxonMobil
+      'NYSE:CVX': 150,      // Chevron
+      'NYSE:COP': 110,      // ConocoPhillips
+      'NYSE:SLB': 50,       // Schlumberger
+      'NYSE:PSX': 145,      // Phillips 66
+      
+      // 工业股
+      'NYSE:BA': 190,       // Boeing
+      'NYSE:CAT': 340,      // Caterpillar
+      'NYSE:GE': 160,       // General Electric
+      'NYSE:MMM': 95,       // 3M
+      'NYSE:HON': 205,      // Honeywell
+      'NYSE:LMT': 470,      // Lockheed Martin
+      'NYSE:UPS': 145,      // UPS
+      
+      // 通信股
+      'NYSE:T': 22,         // AT&T
+      'NASDAQ:CMCSA': 42,   // Comcast
+      'NYSE:VZ': 42,        // Verizon
+      'NASDAQ:TMUS': 175,   // T-Mobile
+      
+      // 房地产/REITs
+      'NYSE:AMT': 195,      // American Tower
+      'NYSE:PLD': 115,      // Prologis
+      'NYSE:SPG': 155,      // Simon Property
+      
+      // 其他
+      'NYSE:BRK.B': 420,    // Berkshire Hathaway B
+      'NYSE:TSM': 155,      // Taiwan Semiconductor
     };
 
     return priceMap[symbol] || 100 + Math.random() * 400;
