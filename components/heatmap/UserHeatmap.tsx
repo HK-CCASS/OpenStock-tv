@@ -104,7 +104,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
       // 批量应用所有更新
       if (updates.length > 0) {
-        console.log(`[Update] Processing ${updates.length} stock updates`);
         // 直接调用（不需要依赖，因为 batchUpdateStockQuotes 是稳定的）
         setData((prevData) => {
           if (!prevData) return prevData;
@@ -467,6 +466,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
     return {
       backgroundColor: '#1a1a1a',
+      animation: false,  // 禁用动画，提升性能
       grid: {
         left: 0,
         right: 0,
@@ -487,49 +487,23 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           // 安全检查
           if (!info || !info.data) return '';
           
-          // 股票信息
+          // 股票信息（简化版：减少 DOM 复杂度）
           const stock = info.data.stockData;
           if (stock) {
-            const changeColor = stock.changePercent >= 0 ? '#66BB6A' : '#EF5350';
-            const changeSign = stock.changePercent >= 0 ? '+' : '';
-            const marketCap = stock.marketCap || 0;
-
-            return `
-              <div style="padding: 8px; min-width: 200px;">
-                <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px;">${stock.symbol}</div>
-                ${stock.name ? `<div style="color: #aaa; font-size: 11px; margin-bottom: 6px;">${stock.name}</div>` : ''}
-                <div style="margin-top: 6px;">
-                  <div style="margin-bottom: 4px;">价格: <span style="font-weight: bold;">$${stock.last.toFixed(2)}</span></div>
-                  <div style="color: ${changeColor}; font-weight: bold;">
-                    ${changeSign}${stock.changePercent.toFixed(2)}% (${changeSign}${Math.abs(stock.change).toFixed(2)})
-                  </div>
-                  ${stock.volume ? `<div style="color: #aaa; font-size: 11px; margin-top: 4px;">成交量: ${stock.volume.toLocaleString()}</div>` : ''}
-                  <div style="color: #aaa; font-size: 11px; margin-top: 4px;">市值: $${(marketCap / 1000000000).toFixed(2)}B</div>
-                </div>
-              </div>
-            `;
+            const change = stock.changePercent >= 0 ? '+' : '';
+            const mc = (stock.marketCap || 0) / 1e9;
+            
+            return `<div style="padding:6px;min-width:150px"><b>${stock.symbol}</b>${stock.name ? `<br><small style="color:#aaa">${stock.name}</small>` : ''}<br>$${stock.last.toFixed(2)} <b style="color:${stock.changePercent >= 0 ? '#6c6' : '#f55'}">${change}${stock.changePercent.toFixed(2)}%</b><br><small style="color:#aaa">市值: $${mc.toFixed(1)}B</small></div>`;
           }
 
-          // Pool 信息（一级视图）
+          // Pool 信息（简化版）
           if (!selectedPool && info.data.children) {
-            const poolData = info.data.poolData;
-            const stockCount = poolData?.stockCount || info.data.children?.length || 0;
-            const avgChange = poolData?.avgChangePercent || 0;
-            const realMarketCap = info.data.realMarketCap || 0; // 使用真实市值
-            const changeColor = avgChange >= 0 ? '#66BB6A' : '#EF5350';
-            const changeSign = avgChange >= 0 ? '+' : '';
-
-            return `
-              <div style="padding: 8px;">
-                <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px;">${info.name}</div>
-                <div style="color: #aaa;">股票数量: ${stockCount}</div>
-                <div style="color: ${changeColor}; margin-top: 4px;">
-                  平均涨跌幅: ${changeSign}${avgChange.toFixed(2)}%
-                </div>
-                <div style="color: #aaa; margin-top: 4px;">总市值: $${(realMarketCap / 1000000000).toFixed(2)}B</div>
-                <div style="color: #4CAF50; font-size: 11px; margin-top: 6px;">点击查看该板块详情</div>
-              </div>
-            `;
+            const pd = info.data.poolData;
+            const cnt = pd?.stockCount || 0;
+            const avg = pd?.avgChangePercent || 0;
+            const mc = (info.data.realMarketCap || 0) / 1e9;
+            
+            return `<div style="padding:6px"><b>${info.name}</b><br>${cnt}只 ${avg >= 0 ? '+' : ''}${avg.toFixed(2)}%<br>$${mc.toFixed(1)}B</div>`;
           }
 
           return '';
@@ -571,23 +545,16 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             fontWeight: 'bold',
             color: '#fff',
             formatter: function (params: any) {
-              const stock = params.data.stockData;
+              const stock = params.data?.stockData;
+              if (!stock) return '';
               
-              if (stock) {
-                const changeSign = stock.changePercent >= 0 ? '+' : '';
-                const area = params.rect?.width * params.rect?.height || 0;
-                
-                // 根据方块大小显示不同内容
-                if (area > 500) {
-                  // 大方块：显示股票名 + 股价 + 涨跌幅
-                  return `${stock.symbol}\n$${stock.last.toFixed(2)}\n${changeSign}${stock.changePercent.toFixed(2)}%`;
-                } else {
-                  // 小方块：只显示股票名和涨跌幅
-                  return `${stock.symbol}\n${changeSign}${stock.changePercent.toFixed(2)}%`;
-                }
-              }
+              const sign = stock.changePercent >= 0 ? '+' : '';
+              const area = (params.rect?.width || 0) * (params.rect?.height || 0);
               
-              return '';
+              // 简化判断：大方块（> 400）显示完整信息，否则只显示基本信息
+              return area > 400
+                ? `${stock.symbol}\n$${stock.last.toFixed(2)}\n${sign}${stock.changePercent.toFixed(2)}%`
+                : `${stock.symbol}\n${sign}${stock.changePercent.toFixed(2)}%`;
             },
             rich: {
               symbolLarge: {
@@ -771,7 +738,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     return buildChartOption(data, selectedPool, displayMode);
   }, [data, selectedPool, displayMode]);
 
-  // 更新 ECharts 数据（当 chartOption 变化时）
+  // 更新 ECharts 数据（防抖优化，避免频繁调用）
   useEffect(() => {
     if (!chartInstanceRef.current || !chartOption) return;
 
@@ -783,17 +750,24 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       return;
     }
 
-    // 使用优化的配置参数
-    chart.setOption(chartOption, {
-      notMerge: false,  // 使用增量更新，提升性能
-      lazyUpdate: false, // 禁用批量更新，确保实时响应
-      silent: false,    // 允许触发事件（用户交互）
+    // 使用 requestAnimationFrame 延迟到下一帧，确保流畅
+    const rafId = requestAnimationFrame(() => {
+      // 使用优化的配置参数
+      chart.setOption(chartOption, {
+        notMerge: false,  // 使用增量更新，提升性能
+        lazyUpdate: false, // 禁用批量更新，确保实时响应
+        silent: false,    // 允许触发事件（用户交互）
+      });
+
+      // 异步 resize 确保尺寸正确
+      requestAnimationFrame(() => {
+        chart.resize();
+      });
     });
 
-    // 异步 resize 确保尺寸正确
-    setTimeout(() => {
-      chart.resize();
-    }, 0);
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
   }, [chartOption]);
 
   if (error && !data) {
