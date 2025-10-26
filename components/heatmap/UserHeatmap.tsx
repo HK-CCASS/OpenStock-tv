@@ -73,6 +73,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [selectedPool, setSelectedPool] = useState<string | null>(null);
   const [selectedStock, setSelectedStock] = useState<StockData | null>(null); // 用于详情卡片
+  const [displayMode, setDisplayMode] = useState<'marketCap' | 'monosize'>('marketCap'); // 显示模式
   const [sseConnected, setSseConnected] = useState(false);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -454,7 +455,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   };
 
   // 构建 ECharts 配置（提取为独立函数，便于维护）
-  const buildChartOption = (data: HeatmapData, selectedPool: string | null) => {
+  const buildChartOption = (data: HeatmapData, selectedPool: string | null, displayMode: 'marketCap' | 'monosize') => {
     // 转换数据为 ECharts 格式
     let treeData;
 
@@ -465,7 +466,10 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
       treeData = pool.stocks.map((stock) => ({
         name: stock.symbol,
-        value: smoothValue(stock.marketCap || 0), // 使用平滑值
+        // 等大小模式 vs 市值比例模式
+        value: displayMode === 'monosize' 
+          ? 1  // 所有股票大小相同
+          : smoothValue(stock.marketCap || 0), // 使用平滑值
         realMarketCap: stock.marketCap || 0,       // 保存真实市值（tooltip 显示）
         stockData: stock,
         itemStyle: {
@@ -477,7 +481,10 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       treeData = data.pools.map((pool) => {
         const children = pool.stocks.map((stock) => ({
           name: stock.symbol,
-          value: smoothValue(stock.marketCap || 0), // 使用平滑值
+          // 等大小模式 vs 市值比例模式
+          value: displayMode === 'monosize' 
+            ? 1  // 所有股票大小相同
+            : smoothValue(stock.marketCap || 0), // 使用平滑值
           realMarketCap: stock.marketCap || 0,       // 保存真实市值
           stockData: stock,
           itemStyle: {
@@ -485,12 +492,14 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
         }));
 
-        // Pool 的 value 也使用所有股票平滑值的总和
-        const poolValue = children.reduce((sum, child) => sum + child.value, 0);
+        // Pool 的 value
+        const poolValue = displayMode === 'monosize'
+          ? children.length  // 等大小模式：按股票数量
+          : children.reduce((sum, child) => sum + child.value, 0);  // 市值模式：平滑值总和
 
         return {
           name: pool.poolName,
-          value: poolValue,                     // 使用平滑值总和
+          value: poolValue,
           realMarketCap: pool.totalMarketCap,  // 保存真实市值
           poolName: pool.poolName,
           poolData: {
@@ -826,12 +835,12 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     };
   }, []); // 只在挂载时执行一次
 
-  // 更新 ECharts 数据（当 data 或 selectedPool 变化时）
+  // 更新 ECharts 数据（当 data、selectedPool 或 displayMode 变化时）
   useEffect(() => {
     if (!chartInstanceRef.current || !data) return;
 
     const chart = chartInstanceRef.current;
-    const option = buildChartOption(data, selectedPool);
+    const option = buildChartOption(data, selectedPool, displayMode);
 
     if (!option) {
       // 如果选中的 pool 不存在，返回一级视图
@@ -850,7 +859,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     setTimeout(() => {
       chart.resize();
     }, 0);
-  }, [data, selectedPool]);
+  }, [data, selectedPool, displayMode]);
 
   if (error && !data) {
     return (
@@ -886,6 +895,30 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         <h1 className="text-white text-lg font-semibold">
           {selectedPool || '股票市场热力图'}
         </h1>
+        
+        {/* 显示模式切换 */}
+        <div className="flex gap-2 ml-4">
+          <button
+            onClick={() => setDisplayMode('marketCap')}
+            className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+              displayMode === 'marketCap'
+                ? 'bg-blue-600 text-white'
+                : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#333]'
+            }`}
+          >
+            市值比例
+          </button>
+          <button
+            onClick={() => setDisplayMode('monosize')}
+            className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
+              displayMode === 'monosize'
+                ? 'bg-blue-600 text-white'
+                : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#333]'
+            }`}
+          >
+            等大小
+          </button>
+        </div>
         
         {/* SSE 连接状态 */}
         <div className="ml-auto flex items-center gap-2">
