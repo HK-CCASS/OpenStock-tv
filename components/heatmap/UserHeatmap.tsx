@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { AlertCircle, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Maximize2, Minimize2, Wifi, WifiOff } from 'lucide-react';
 import { StockDetailCard } from './StockDetailCard';
 
 // 数据结构
@@ -75,8 +75,10 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   const [selectedStock, setSelectedStock] = useState<StockData | null>(null); // 用于详情卡片
   const [displayMode, setDisplayMode] = useState<'marketCap' | 'monosize'>('marketCap'); // 显示模式
   const [sseConnected, setSseConnected] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false); // 全屏状态
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null); // 容器引用（用于全屏）
   
   // SSE 更新节流：使用 RAF 批量处理
   const updateQueueRef = useRef<Map<string, any>>(new Map());
@@ -358,6 +360,38 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       }
     };
   };
+
+  // 全屏切换
+  const toggleFullscreen = useCallback(() => {
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().catch((err) => {
+        console.error('Failed to enter fullscreen:', err);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  }, []);
+
+  // 监听全屏状态变化
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      
+      // 全屏状态变化时，重新调整图表大小
+      if (chartInstanceRef.current) {
+        setTimeout(() => {
+          chartInstanceRef.current?.resize();
+        }, 100);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   // 组件卸载时清理 RAF
   useEffect(() => {
@@ -806,7 +840,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="w-full h-screen bg-[#1a1a1a] flex flex-col overflow-hidden">
+    <div ref={containerRef} className="w-full h-screen bg-[#1a1a1a] flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
       <div className="bg-[#1f1f1f] border-b border-[#2a2a2a] px-6 py-3 flex items-center gap-4 flex-shrink-0">
         {selectedPool && (
@@ -847,18 +881,39 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         </div>
         
         {/* SSE 连接状态 */}
-        <div className="ml-auto flex items-center gap-2">
-          {sseConnected ? (
-            <>
-              <Wifi className="w-4 h-4 text-green-500" />
-              <span className="text-green-500 text-sm">实时连接</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="w-4 h-4 text-gray-500" />
-              <span className="text-gray-500 text-sm">离线</span>
-            </>
-          )}
+        <div className="ml-auto flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {sseConnected ? (
+              <>
+                <Wifi className="w-4 h-4 text-green-500" />
+                <span className="text-green-500 text-sm">实时连接</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4 text-gray-500" />
+                <span className="text-gray-500 text-sm">离线</span>
+              </>
+            )}
+          </div>
+          
+          {/* 全屏按钮 */}
+          <button
+            onClick={toggleFullscreen}
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#2a2a2a] text-white rounded hover:bg-[#333] transition-colors"
+            title={isFullscreen ? '退出全屏' : '进入全屏'}
+          >
+            {isFullscreen ? (
+              <>
+                <Minimize2 className="w-4 h-4" />
+                <span className="text-sm">退出全屏</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-4 h-4" />
+                <span className="text-sm">全屏</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
