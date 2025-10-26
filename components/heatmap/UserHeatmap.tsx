@@ -487,23 +487,42 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           // 安全检查
           if (!info || !info.data) return '';
           
-          // 股票信息（简化版：减少 DOM 复杂度）
+          // 股票信息（完整版）
           const stock = info.data.stockData;
           if (stock) {
-            const change = stock.changePercent >= 0 ? '+' : '';
-            const mc = (stock.marketCap || 0) / 1e9;
-            
-            return `<div style="padding:6px;min-width:150px"><b>${stock.symbol}</b>${stock.name ? `<br><small style="color:#aaa">${stock.name}</small>` : ''}<br>$${stock.last.toFixed(2)} <b style="color:${stock.changePercent >= 0 ? '#6c6' : '#f55'}">${change}${stock.changePercent.toFixed(2)}%</b><br><small style="color:#aaa">市值: $${mc.toFixed(1)}B</small></div>`;
+            const changeColor = stock.changePercent >= 0 ? '#66BB6A' : '#EF5350';
+            const changeSign = stock.changePercent >= 0 ? '+' : '';
+            const marketCap = (stock.marketCap || 0) / 1000000000;
+
+            let html = '<div style="padding:8px;min-width:200px">';
+            html += `<div style="font-weight:bold;font-size:14px;margin-bottom:4px">${stock.symbol}</div>`;
+            if (stock.name) html += `<div style="color:#aaa;font-size:11px;margin-bottom:4px">${stock.name}</div>`;
+            html += '<div style="margin-top:4px">';
+            html += `<div style="margin-bottom:3px">价格: <b>$${stock.last.toFixed(2)}</b></div>`;
+            html += `<div style="color:${changeColor};font-weight:bold">${changeSign}${stock.changePercent.toFixed(2)}% (${changeSign}${Math.abs(stock.change).toFixed(2)})</div>`;
+            if (stock.volume) html += `<div style="color:#aaa;font-size:11px;margin-top:3px">成交量: ${stock.volume.toLocaleString()}</div>`;
+            html += `<div style="color:#aaa;font-size:11px;margin-top:3px">市值: $${marketCap.toFixed(2)}B</div>`;
+            html += '</div></div>';
+            return html;
           }
 
-          // Pool 信息（简化版）
+          // Pool 信息（完整版）
           if (!selectedPool && info.data.children) {
-            const pd = info.data.poolData;
-            const cnt = pd?.stockCount || 0;
-            const avg = pd?.avgChangePercent || 0;
-            const mc = (info.data.realMarketCap || 0) / 1e9;
-            
-            return `<div style="padding:6px"><b>${info.name}</b><br>${cnt}只 ${avg >= 0 ? '+' : ''}${avg.toFixed(2)}%<br>$${mc.toFixed(1)}B</div>`;
+            const poolData = info.data.poolData;
+            const stockCount = poolData?.stockCount || info.data.children?.length || 0;
+            const avgChange = poolData?.avgChangePercent || 0;
+            const realMarketCap = (info.data.realMarketCap || 0) / 1000000000;
+            const changeColor = avgChange >= 0 ? '#66BB6A' : '#EF5350';
+            const changeSign = avgChange >= 0 ? '+' : '';
+
+            let html = '<div style="padding:8px">';
+            html += `<div style="font-weight:bold;font-size:14px;margin-bottom:4px">${info.name}</div>`;
+            html += `<div style="color:#aaa">股票数量: ${stockCount}</div>`;
+            html += `<div style="color:${changeColor};margin-top:3px">平均涨跌幅: ${changeSign}${avgChange.toFixed(2)}%</div>`;
+            html += `<div style="color:#aaa;margin-top:3px">总市值: $${realMarketCap.toFixed(2)}B</div>`;
+            html += '<div style="color:#4CAF50;font-size:11px;margin-top:5px">点击查看该板块详情</div>';
+            html += '</div>';
+            return html;
           }
 
           return '';
@@ -551,10 +570,17 @@ export default function UserHeatmap({ userId }: { userId: string }) {
               const sign = stock.changePercent >= 0 ? '+' : '';
               const area = (params.rect?.width || 0) * (params.rect?.height || 0);
               
-              // 简化判断：大方块（> 400）显示完整信息，否则只显示基本信息
-              return area > 400
-                ? `${stock.symbol}\n$${stock.last.toFixed(2)}\n${sign}${stock.changePercent.toFixed(2)}%`
-                : `${stock.symbol}\n${sign}${stock.changePercent.toFixed(2)}%`;
+              // 默认显示完整信息（股票名 + 股价 + 涨跌幅），只有极小方块才简化
+              if (area < 200) {
+                // 极小方块（< 200）：只显示股票名
+                return stock.symbol;
+              } else if (area < 350) {
+                // 小方块（200-350）：显示股票名和涨跌幅
+                return `${stock.symbol}\n${sign}${stock.changePercent.toFixed(2)}%`;
+              } else {
+                // 正常方块（>= 350）：显示完整信息
+                return `${stock.symbol}\n$${stock.last.toFixed(2)}\n${sign}${stock.changePercent.toFixed(2)}%`;
+              }
             },
             rich: {
               symbolLarge: {
