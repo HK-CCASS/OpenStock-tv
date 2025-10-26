@@ -31,21 +31,38 @@ interface HeatmapData {
   timestamp: Date;
 }
 
-// 根据涨跌幅返回颜色（TradingView风格渐变）
+// 根据涨跌幅返回颜色（TradingView风格渐变，增强对比度）
 const getColorByChange = (changePercent: number): string => {
-  if (changePercent >= 5) return '#4CAF50';
-  if (changePercent >= 4) return '#43A047';
-  if (changePercent >= 3) return '#388E3C';
-  if (changePercent >= 2) return '#2E7D32';
-  if (changePercent >= 1) return '#1B5E20';
-  if (changePercent > 0) return '#0D4D1C';
-  if (changePercent === 0) return '#424242';
-  if (changePercent > -1) return '#5D1715';
-  if (changePercent > -2) return '#8B1A1A';
-  if (changePercent > -3) return '#B71C1C';
-  if (changePercent > -4) return '#C62828';
-  if (changePercent > -5) return '#D32F2F';
-  return '#E53935';
+  // 极端上涨（新增）
+  if (changePercent >= 10) return '#00E676';     // 超亮绿色（> 10%）
+  if (changePercent >= 7) return '#00C853';      // 亮绿色（7-10%）
+  
+  // 强劲上涨
+  if (changePercent >= 5) return '#4CAF50';      // 绿色（5-7%）
+  if (changePercent >= 4) return '#43A047';      // 中绿（4-5%）
+  if (changePercent >= 3) return '#388E3C';      // 深绿（3-4%）
+  
+  // 温和上涨
+  if (changePercent >= 2) return '#2E7D32';      // 墨绿（2-3%）
+  if (changePercent >= 1) return '#1B5E20';      // 深墨绿（1-2%）
+  if (changePercent > 0) return '#0D4D1C';       // 极深绿（0-1%）
+  
+  // 平盘
+  if (changePercent === 0) return '#424242';     // 深灰色
+  
+  // 温和下跌
+  if (changePercent > -1) return '#5D1715';      // 极深红（-1-0%）
+  if (changePercent > -2) return '#8B1A1A';      // 深红（-2--1%）
+  if (changePercent > -3) return '#B71C1C';      // 暗红（-3--2%）
+  
+  // 强劲下跌
+  if (changePercent > -4) return '#C62828';      // 红色（-4--3%）
+  if (changePercent > -5) return '#D32F2F';      // 中红（-5--4%）
+  if (changePercent > -7) return '#E53935';      // 亮红（-7--5%）
+  
+  // 极端下跌（新增）
+  if (changePercent > -10) return '#FF1744';     // 超亮红色（-10--7%）
+  return '#FF0000';                               // 纯红色（< -10%）
 };
 
 export default function UserHeatmap({ userId }: { userId: string }) {
@@ -535,7 +552,11 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           right: 0,
           top: 0,
           bottom: 0,
-          roam: false,
+          roam: 'scale',                  // 启用缩放功能（'scale' 或 true）
+          scaleLimit: {
+            min: 1,                       // 最小缩放比例
+            max: 5,                       // 最大缩放比例（放大 5 倍查看小股票）
+          },
           nodeClick: selectedPool ? false : 'link',
           leafDepth: selectedPool ? 0 : 2, // 一级视图显示 2 层，二级视图显示 1 层
           squareRatio: 0.5,  // 降低比例，更接近正方形
@@ -545,9 +566,13 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             show: false,
           },
           itemStyle: {
-            borderColor: '#1f1f1f',
-            borderWidth: 2,
-            gapWidth: 2,
+            borderColor: '#0a0a0a',     // 更深的黑色，增强对比
+            borderWidth: 3,              // 加粗边框（2 → 3）
+            gapWidth: 4,                 // 增大间隙（2 → 4）
+            shadowBlur: 8,               // 添加阴影
+            shadowColor: 'rgba(0, 0, 0, 0.5)',
+            shadowOffsetX: 2,
+            shadowOffsetY: 2,
           },
           label: {
             show: true,
@@ -555,35 +580,44 @@ export default function UserHeatmap({ userId }: { userId: string }) {
               const stock = params.data.stockData;
               
               if (stock) {
-                // 根据方块大小决定显示内容（降低阈值以适应实际情况）
+                // 根据方块大小决定显示内容和字体大小
                 const area = params.rect?.width * params.rect?.height || 0;
+                const width = params.rect?.width || 0;
+                const height = params.rect?.height || 0;
                 const changeSign = stock.changePercent >= 0 ? '+' : '';
+                
+                // 动态计算字体大小（根据方块面积）
+                const baseFontSize = Math.max(10, Math.min(18, Math.sqrt(area) / 4));
+                
+                // 计算宽高比，避免细长方块显示过多文字
+                const aspectRatio = Math.max(width, height) / Math.min(width, height);
+                const isTooNarrow = aspectRatio > 3;
                 
                 // 调试：输出方块大小（开发时使用）
                 if (Math.random() < 0.01) { // 随机采样 1%
-                  console.log(`[Label] ${stock.symbol} 方块大小: ${area.toFixed(0)}px² (${params.rect?.width.toFixed(0)}x${params.rect?.height.toFixed(0)})`);
+                  console.log(`[Label] ${stock.symbol} 方块大小: ${area.toFixed(0)}px² (${width.toFixed(0)}x${height.toFixed(0)}), 字体: ${baseFontSize.toFixed(1)}px`);
                 }
                 
-                // 大方块（> 1500px²）：显示完整信息
-                if (area > 1500) {
+                // 大方块（> 1500px² 且不太窄）：显示完整信息
+                if (area > 1500 && !isTooNarrow) {
                   return [
-                    `{symbol|${stock.symbol}}`,
+                    `{symbolLarge|${stock.symbol}}`,
                     `{price|$${stock.last.toFixed(2)}}`,
                     `{change|${changeSign}${stock.changePercent.toFixed(2)}%}`,
                   ].join('\n');
                 }
                 // 中等方块（800-1500px²）：只显示股票名和涨跌幅
-                else if (area > 800) {
+                else if (area > 800 && width > 50 && height > 30) {
                   return [
-                    `{symbol|${stock.symbol}}`,
-                    `{change|${changeSign}${stock.changePercent.toFixed(1)}%}`,
+                    `{symbolMedium|${stock.symbol}}`,
+                    `{changeSmall|${changeSign}${stock.changePercent.toFixed(1)}%}`,
                   ].join('\n');
                 }
-                // 小方块（200-800px²）：只显示股票名
-                else if (area > 200) {
+                // 小方块（300-800px²）：只显示股票名
+                else if (area > 300 && width > 35) {
                   return `{symbolSmall|${stock.symbol}}`;
                 }
-                // 极小方块（< 200px²）：不显示文字
+                // 极小方块（< 300px²）：不显示文字
                 else {
                   return '';
                 }
@@ -592,27 +626,52 @@ export default function UserHeatmap({ userId }: { userId: string }) {
               return '';
             },
             rich: {
-              symbol: {
+              symbolLarge: {
+                fontSize: 16,                 // 加大字体
+                fontWeight: 'bold',
+                color: '#fff',
+                lineHeight: 22,
+                shadowBlur: 2,                 // 添加文字阴影
+                shadowColor: 'rgba(0, 0, 0, 0.8)',
+              },
+              symbolMedium: {
                 fontSize: 14,
                 fontWeight: 'bold',
                 color: '#fff',
                 lineHeight: 20,
+                shadowBlur: 2,
+                shadowColor: 'rgba(0, 0, 0, 0.8)',
               },
               symbolSmall: {
+                fontSize: 11,
+                fontWeight: 'bold',
+                color: '#fff',
+                lineHeight: 14,
+                shadowBlur: 1,
+                shadowColor: 'rgba(0, 0, 0, 0.8)',
+              },
+              price: {
+                fontSize: 13,                 // 加大字体
+                color: '#fff',
+                lineHeight: 19,
+                shadowBlur: 1,
+                shadowColor: 'rgba(0, 0, 0, 0.8)',
+              },
+              change: {
+                fontSize: 12,                 // 加大字体
+                fontWeight: 'bold',            // 加粗涨跌幅
+                color: '#fff',
+                lineHeight: 17,
+                shadowBlur: 1,
+                shadowColor: 'rgba(0, 0, 0, 0.8)',
+              },
+              changeSmall: {
                 fontSize: 10,
                 fontWeight: 'bold',
                 color: '#fff',
                 lineHeight: 14,
-              },
-              price: {
-                fontSize: 12,
-                color: '#fff',
-                lineHeight: 18,
-              },
-              change: {
-                fontSize: 11,
-                color: '#fff',
-                lineHeight: 16,
+                shadowBlur: 1,
+                shadowColor: 'rgba(0, 0, 0, 0.8)',
               },
               poolName: {
                 fontSize: 18,
@@ -637,15 +696,18 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
           upperLabel: {
             show: true,
-            height: 30,
-            color: '#fff',
-            fontSize: 16,
+            height: 40,                            // 加高（30 → 40）
+            color: '#ffffff',
+            fontSize: 18,                          // 加大字体（16 → 18）
             fontWeight: 'bold',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            borderColor: 'rgba(255, 255, 255, 0.2)',
-            borderWidth: 1,
-            borderRadius: 4,
-            padding: [6, 10],
+            backgroundColor: 'rgba(0, 0, 0, 0.85)', // 提高不透明度（0.5 → 0.85）
+            borderColor: 'rgba(255, 255, 255, 0.3)', // 提高边框对比度（0.2 → 0.3）
+            borderWidth: 2,                         // 加粗边框（1 → 2）
+            borderRadius: 6,                        // 更圆滑（4 → 6）
+            padding: [10, 16],                      // 加大内边距（[6, 10] → [10, 16]）
+            shadowBlur: 12,                         // 添加阴影
+            shadowColor: 'rgba(0, 0, 0, 0.6)',
+            shadowOffsetY: 2,
             formatter: function (params: any) {
               const poolData = params.data.poolData;
               if (poolData) {
@@ -657,25 +719,32 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
           levels: [
             {
+              // 一级视图：Pool 容器
               itemStyle: {
                 borderWidth: 0,
-                gapWidth: 4,
+                gapWidth: 6,              // 增大池子间隙（4 → 6）
               },
             },
             {
+              // 二级视图：Pool 标签层
               itemStyle: {
-                borderWidth: 2,
-                gapWidth: 2,
-                borderColor: '#1f1f1f',
+                borderWidth: 3,           // 加粗边框（2 → 3）
+                gapWidth: 4,              // 增大间隙（2 → 4）
+                borderColor: '#0a0a0a',   // 更深的黑色
+                shadowBlur: 6,            // 添加阴影
+                shadowColor: 'rgba(0, 0, 0, 0.4)',
               },
               upperLabel: {
                 show: true,
               },
             },
             {
+              // 三级视图：Stock 方块层
               itemStyle: {
-                borderWidth: 2,
-                borderColor: '#1f1f1f',
+                borderWidth: 3,           // 加粗边框（2 → 3）
+                borderColor: '#0a0a0a',   // 更深的黑色
+                shadowBlur: 4,            // 添加阴影
+                shadowColor: 'rgba(0, 0, 0, 0.3)',
               },
             },
           ],
