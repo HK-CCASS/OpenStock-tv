@@ -241,21 +241,6 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         };
       });
 
-      // 调试日志：输出每个 Pool 的详细信息
-      const poolsInfo = pools.map(p => ({ 
-        name: p.poolName, 
-        stockCount: p.stockCount,
-        totalMarketCap: (p.totalMarketCap / 1000000000).toFixed(2) + 'B',
-        stocks: p.stocks.map(s => ({
-          symbol: s.symbol,
-          marketCap: ((s.marketCap || 0) / 1000000000).toFixed(2) + 'B',
-          price: s.last.toFixed(2),
-        }))
-      }));
-      
-      console.log('[Heatmap Debug] 获取到的 pools 数量:', pools.length);
-      console.log('[Heatmap Debug] Pools 详情:', JSON.stringify(poolsInfo, null, 2));
-
       setData({
         pools,
         timestamp: new Date(),
@@ -419,39 +404,12 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     };
   }, [data, loading]); // data 变化时重新连接（例如用户切换账号）
 
-  // 分段平滑算法（智能处理不同规模的市值）
+  // 简化的市值平滑算法（临时禁用复杂算法，使用简单平方根）
   const smoothValue = (marketCap: number): number => {
     if (marketCap <= 0) return 1;
     
-    // 市值阈值定义
-    const MEGA_CAP_THRESHOLD = 1000000000000;  // 1T（超大市值）
-    const LARGE_CAP_THRESHOLD = 500000000000;  // 500B（大市值）
-    const MID_CAP_THRESHOLD = 50000000000;     // 50B（中市值）
-    const SMALL_CAP_THRESHOLD = 10000000000;   // 10B（小市值）
-    
-    // 分段平滑策略
-    if (marketCap > MEGA_CAP_THRESHOLD) {
-      // 超大市值（> 1T）：激进压缩（立方根）
-      // 例如：3T → 1442, 1T → 1000
-      return Math.cbrt(marketCap) * 0.7;
-    } else if (marketCap > LARGE_CAP_THRESHOLD) {
-      // 大市值（500B-1T）：平方根压缩
-      // 例如：800B → 632, 500B → 500
-      return Math.sqrt(marketCap) * 0.9;
-    } else if (marketCap > MID_CAP_THRESHOLD) {
-      // 中市值（50B-500B）：平方根压缩（标准）
-      // 例如：100B → 316, 50B → 224
-      return Math.sqrt(marketCap);
-    } else if (marketCap > SMALL_CAP_THRESHOLD) {
-      // 小市值（10B-50B）：温和压缩
-      // 例如：30B → 240, 10B → 150
-      return Math.sqrt(marketCap) * 1.5;
-    } else {
-      // 微市值（< 10B）：线性放大
-      // 例如：5B → 100, 1B → 50
-      // 确保小股票也能看见
-      return (marketCap / 1000000000) * 50;  // 1B → 50px²
-    }
+    // 简单平方根压缩（临时调试用）
+    return Math.sqrt(marketCap / 1000000); // 1B → 31.6, 100B → 316, 1T → 1000
   };
 
   // 构建 ECharts 配置（提取为独立函数，便于维护）
@@ -462,20 +420,26 @@ export default function UserHeatmap({ userId }: { userId: string }) {
     if (selectedPool) {
       // 二级视图：只显示选中 pool 的股票
       const pool = data.pools.find((p) => p.poolName === selectedPool);
-      if (!pool) return null;
+      if (!pool) {
+        console.error('[buildChartOption] 找不到选中的 pool:', selectedPool);
+        return null;
+      }
 
-      treeData = pool.stocks.map((stock) => ({
-        name: stock.symbol,
-        // 等大小模式 vs 市值比例模式
-        value: displayMode === 'monosize' 
+      treeData = pool.stocks.map((stock) => {
+        const value = displayMode === 'monosize' 
           ? 1  // 所有股票大小相同
-          : smoothValue(stock.marketCap || 0), // 使用平滑值
-        realMarketCap: stock.marketCap || 0,       // 保存真实市值（tooltip 显示）
-        stockData: stock,
-        itemStyle: {
-          color: getColorByChange(stock.changePercent),
-        },
-      }));
+          : Math.sqrt((stock.marketCap || 1000000000) / 1000000); // 简单平方根压缩
+        
+        return {
+          name: stock.symbol,
+          value,
+          realMarketCap: stock.marketCap || 0,       // 保存真实市值（tooltip 显示）
+          stockData: stock,
+          itemStyle: {
+            color: getColorByChange(stock.changePercent),
+          },
+        };
+      });
     } else {
       // 一级视图：Finviz 风格，显示所有 pool + stocks
       treeData = data.pools.map((pool) => {
@@ -484,7 +448,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           // 等大小模式 vs 市值比例模式
           value: displayMode === 'monosize' 
             ? 1  // 所有股票大小相同
-            : smoothValue(stock.marketCap || 0), // 使用平滑值
+            : Math.sqrt((stock.marketCap || 1000000000) / 1000000), // 简单平方根压缩
           realMarketCap: stock.marketCap || 0,       // 保存真实市值
           stockData: stock,
           itemStyle: {
@@ -495,7 +459,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         // Pool 的 value
         const poolValue = displayMode === 'monosize'
           ? children.length  // 等大小模式：按股票数量
-          : children.reduce((sum, child) => sum + child.value, 0);  // 市值模式：平滑值总和
+          : children.reduce((sum, child) => sum + child.value, 0);  // 市值模式：原始市值总和
 
         return {
           name: pool.poolName,
@@ -530,6 +494,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           fontSize: 12,
         },
         formatter: function (info: any) {
+          // 安全检查
+          if (!info || !info.data) return '';
+          
           // 股票信息
           const stock = info.data.stockData;
           if (stock) {
@@ -586,74 +553,47 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           right: 0,
           top: 0,
           bottom: 0,
-          roam: 'scale',                  // 启用缩放功能（'scale' 或 true）
-          scaleLimit: {
-            min: 1,                       // 最小缩放比例
-            max: 5,                       // 最大缩放比例（放大 5 倍查看小股票）
-          },
+          roam: false,                    // 临时禁用缩放（排查卡顿问题）
+          // scaleLimit: {
+          //   min: 1,                       // 最小缩放比例
+          //   max: 5,                       // 最大缩放比例（放大 5 倍查看小股票）
+          // },
           nodeClick: selectedPool ? false : 'link',
-          leafDepth: selectedPool ? 0 : 2, // 一级视图显示 2 层，二级视图显示 1 层
+          leafDepth: selectedPool ? 1 : 2, // 二级视图显示 1 层（修复），一级视图显示 2 层
           squareRatio: 0.5,  // 降低比例，更接近正方形
-          visibleMin: 10,    // 最小可见面积（像素²），确保小股票也能显示
-          childrenVisibleMin: 10,  // 子节点最小可见面积
+          visibleMin: 1,    // 最小可见面积（像素²），设为1确保所有内容都显示
+          childrenVisibleMin: 1,  // 子节点最小可见面积
           breadcrumb: {
             show: false,
           },
           itemStyle: {
             borderColor: '#0a0a0a',     // 更深的黑色，增强对比
-            borderWidth: 3,              // 加粗边框（2 → 3）
-            gapWidth: 4,                 // 增大间隙（2 → 4）
-            shadowBlur: 8,               // 添加阴影
-            shadowColor: 'rgba(0, 0, 0, 0.5)',
-            shadowOffsetX: 2,
-            shadowOffsetY: 2,
+            borderWidth: 1,              // 细边框（避免过多空间浪费）
+            gapWidth: 1,                 // 最小间隙（1px）
+            shadowBlur: 0,               // 禁用阴影（性能优化）
+            shadowColor: 'rgba(0, 0, 0, 0)',
+            shadowOffsetX: 0,
+            shadowOffsetY: 0,
           },
           label: {
             show: true,
+            fontSize: 11,
+            fontWeight: 'bold',
+            color: '#fff',
             formatter: function (params: any) {
               const stock = params.data.stockData;
               
               if (stock) {
-                // 根据方块大小决定显示内容和字体大小
-                const area = params.rect?.width * params.rect?.height || 0;
-                const width = params.rect?.width || 0;
-                const height = params.rect?.height || 0;
                 const changeSign = stock.changePercent >= 0 ? '+' : '';
+                const area = params.rect?.width * params.rect?.height || 0;
                 
-                // 动态计算字体大小（根据方块面积）
-                const baseFontSize = Math.max(10, Math.min(18, Math.sqrt(area) / 4));
-                
-                // 计算宽高比，避免细长方块显示过多文字
-                const aspectRatio = Math.max(width, height) / Math.min(width, height);
-                const isTooNarrow = aspectRatio > 3;
-                
-                // 调试：输出方块大小（开发时使用）
-                if (Math.random() < 0.01) { // 随机采样 1%
-                  console.log(`[Label] ${stock.symbol} 方块大小: ${area.toFixed(0)}px² (${width.toFixed(0)}x${height.toFixed(0)}), 字体: ${baseFontSize.toFixed(1)}px`);
-                }
-                
-                // 大方块（> 1500px² 且不太窄）：显示完整信息
-                if (area > 1500 && !isTooNarrow) {
-                  return [
-                    `{symbolLarge|${stock.symbol}}`,
-                    `{price|$${stock.last.toFixed(2)}}`,
-                    `{change|${changeSign}${stock.changePercent.toFixed(2)}%}`,
-                  ].join('\n');
-                }
-                // 中等方块（800-1500px²）：只显示股票名和涨跌幅
-                else if (area > 800 && width > 50 && height > 30) {
-                  return [
-                    `{symbolMedium|${stock.symbol}}`,
-                    `{changeSmall|${changeSign}${stock.changePercent.toFixed(1)}%}`,
-                  ].join('\n');
-                }
-                // 小方块（300-800px²）：只显示股票名
-                else if (area > 300 && width > 35) {
-                  return `{symbolSmall|${stock.symbol}}`;
-                }
-                // 极小方块（< 300px²）：不显示文字
-                else {
-                  return '';
+                // 根据方块大小显示不同内容
+                if (area > 500) {
+                  // 大方块：显示股票名 + 股价 + 涨跌幅
+                  return `${stock.symbol}\n$${stock.last.toFixed(2)}\n${changeSign}${stock.changePercent.toFixed(2)}%`;
+                } else {
+                  // 小方块：只显示股票名和涨跌幅
+                  return `${stock.symbol}\n${changeSign}${stock.changePercent.toFixed(2)}%`;
                 }
               }
               
@@ -730,18 +670,18 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
           upperLabel: {
             show: true,
-            height: 40,                            // 加高（30 → 40）
+            height: 30,                            // 标准高度
             color: '#ffffff',
-            fontSize: 18,                          // 加大字体（16 → 18）
+            fontSize: 14,                          // 标准字体
             fontWeight: 'bold',
-            backgroundColor: 'rgba(0, 0, 0, 0.85)', // 提高不透明度（0.5 → 0.85）
-            borderColor: 'rgba(255, 255, 255, 0.3)', // 提高边框对比度（0.2 → 0.3）
-            borderWidth: 2,                         // 加粗边框（1 → 2）
-            borderRadius: 6,                        // 更圆滑（4 → 6）
-            padding: [10, 16],                      // 加大内边距（[6, 10] → [10, 16]）
-            shadowBlur: 12,                         // 添加阴影
-            shadowColor: 'rgba(0, 0, 0, 0.6)',
-            shadowOffsetY: 2,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)', // 半透明背景
+            borderColor: 'rgba(255, 255, 255, 0.2)', // 细边框
+            borderWidth: 1,                         // 细边框
+            borderRadius: 4,                        // 圆角
+            padding: [6, 10],                      // 标准内边距
+            shadowBlur: 0,                         // 禁用阴影（性能优化）
+            shadowColor: 'rgba(0, 0, 0, 0)',
+            shadowOffsetY: 0,
             formatter: function (params: any) {
               const poolData = params.data.poolData;
               if (poolData) {
@@ -756,17 +696,17 @@ export default function UserHeatmap({ userId }: { userId: string }) {
               // 一级视图：Pool 容器
               itemStyle: {
                 borderWidth: 0,
-                gapWidth: 6,              // 增大池子间隙（4 → 6）
+                gapWidth: 2,              // 标准间隙
               },
             },
             {
               // 二级视图：Pool 标签层
               itemStyle: {
-                borderWidth: 3,           // 加粗边框（2 → 3）
-                gapWidth: 4,              // 增大间隙（2 → 4）
-                borderColor: '#0a0a0a',   // 更深的黑色
-                shadowBlur: 6,            // 添加阴影
-                shadowColor: 'rgba(0, 0, 0, 0.4)',
+                borderWidth: 1,           // 细边框
+                gapWidth: 1,              // 最小间隙
+                borderColor: '#0a0a0a',   // 黑色边框
+                shadowBlur: 0,            // 禁用阴影
+                shadowColor: 'rgba(0, 0, 0, 0)',
               },
               upperLabel: {
                 show: true,
@@ -775,10 +715,10 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             {
               // 三级视图：Stock 方块层
               itemStyle: {
-                borderWidth: 3,           // 加粗边框（2 → 3）
-                borderColor: '#0a0a0a',   // 更深的黑色
-                shadowBlur: 4,            // 添加阴影
-                shadowColor: 'rgba(0, 0, 0, 0.3)',
+                borderWidth: 1,           // 细边框
+                borderColor: '#0a0a0a',   // 黑色边框
+                shadowBlur: 0,            // 禁用阴影
+                shadowColor: 'rgba(0, 0, 0, 0)',
               },
             },
           ],
@@ -850,8 +790,8 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
     // 使用优化的配置参数
     chart.setOption(option, {
-      notMerge: true,   // 完全替换配置，避免旧数据污染
-      lazyUpdate: true, // 启用批量更新，提升性能
+      notMerge: false,  // 使用增量更新，提升性能
+      lazyUpdate: false, // 禁用批量更新，确保实时响应
       silent: false,    // 允许触发事件（用户交互）
     });
 
