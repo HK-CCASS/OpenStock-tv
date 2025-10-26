@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test:db": "node scripts/test-db.mjs",
     "migrate:watchlist": "npx tsx scripts/migrate-watchlist.ts",
+    "migrate:multigroup": "npx tsx scripts/migrate-watchlist-multi-group.ts",
+    "test:multigroup": "npx tsx scripts/test-watchlist-multi-group.ts",
     "cache:check": "npx tsx scripts/check-cache-status.ts",
     "cache:visualize": "npx tsx scripts/visualize-cache.ts"
   },

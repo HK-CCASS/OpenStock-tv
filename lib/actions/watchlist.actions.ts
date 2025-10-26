@@ -58,23 +58,30 @@ export async function addToWatchlist(
             }
         }
 
-        // 2️⃣ 添加到 Watchlist 数据库
-        await Watchlist.findOneAndUpdate(
-            { userId, symbol: symbol.toUpperCase() },
-            {
-                $set: {
-                    company: company.trim(),
-                    groupId: targetGroupId,
-                },
-                $setOnInsert: {
-                    addedAt: new Date(),
-                },
-            },
-            { upsert: true, new: true }
-        );
-
-        // 3️⃣ 异步预缓存市值数据（不阻塞响应）
+        // 2️⃣ 检查是否已在该分组（幂等性）
         const normalizedSymbol = symbol.toUpperCase();
+        const existing = await Watchlist.findOne({
+            userId,
+            symbol: normalizedSymbol,
+            groupId: targetGroupId,
+        });
+
+        if (existing) {
+            // 已存在，幂等返回成功
+            console.log(`[Watchlist] ${normalizedSymbol} already in group ${targetGroupId}`);
+            return { success: true };
+        }
+
+        // 3️⃣ 创建新记录（允许同一股票在多个分组）
+        await Watchlist.create({
+            userId,
+            symbol: normalizedSymbol,
+            company: company.trim(),
+            groupId: targetGroupId,
+            addedAt: new Date(),
+        });
+
+        // 4️⃣ 异步预缓存市值数据（不阻塞响应）
         getMarketCapCache([normalizedSymbol])
             .then(() => {
                 console.log(`[Watchlist] ✅ Pre-cached market cap for ${normalizedSymbol}`);
@@ -92,11 +99,15 @@ export async function addToWatchlist(
 
 /**
  * 从自选列表移除股票
+ * @param userId - 用户ID
+ * @param symbol - 股票代码
+ * @param groupId - 可选的分组ID，如果提供则只从该分组删除；否则从所有分组删除
  */
 export async function removeFromWatchlist(
     userId: string,
-    symbol: string
-): Promise<{ success: boolean; error?: string }> {
+    symbol: string,
+    groupId?: string
+): Promise<{ success: boolean; error?: string; deletedCount?: number }> {
     if (!userId || !symbol) {
         return { success: false, error: 'userId and symbol are required' };
     }
@@ -104,16 +115,25 @@ export async function removeFromWatchlist(
     try {
         await connectToDatabase();
 
-        const result = await Watchlist.findOneAndDelete({
+        const query: any = {
             userId,
             symbol: symbol.toUpperCase(),
-        });
+        };
 
-        if (!result) {
+        // 如果提供了 groupId，只删除该分组中的股票
+        if (groupId) {
+            query.groupId = groupId;
+        }
+        // 否则删除所有分组中的该股票
+
+        const result = await Watchlist.deleteMany(query);
+
+        if (result.deletedCount === 0) {
             return { success: false, error: 'Symbol not found in watchlist' };
         }
 
-        return { success: true };
+        console.log(`[Watchlist] Removed ${result.deletedCount} instance(s) of ${symbol.toUpperCase()}`);
+        return { success: true, deletedCount: result.deletedCount };
     } catch (error) {
         console.error('removeFromWatchlist error:', error);
         return { success: false, error: 'Failed to remove from watchlist' };

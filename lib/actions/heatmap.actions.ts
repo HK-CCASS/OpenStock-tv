@@ -153,7 +153,9 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
       let marketCap = data.marketCap || 0;
       let source = 'yahoo';
 
-      if (!(await isValidMarketCap(marketCap))) {
+      // 验证市值有效性（100万 ~ 10万亿美元）
+      const isValid = marketCap > 1000000 && marketCap < 10000000000000;
+      if (!isValid) {
         marketCap = (data.price || 1) * 1000000000;
         source = 'fallback';
         console.warn(
@@ -176,7 +178,9 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
       let marketCap = data.marketCap || 0;
       let source = 'finnhub';
 
-      if (!(await isValidMarketCap(marketCap))) {
+      // 验证市值有效性（100万 ~ 10万亿美元）
+      const isValid = marketCap > 1000000 && marketCap < 10000000000000;
+      if (!isValid) {
         marketCap = (data.price || 1) * 1000000000;
         source = 'fallback';
       }

@@ -19,8 +19,11 @@ const WatchlistSchema = new Schema<WatchlistItem>(
     { timestamps: false }
 );
 
-// Prevent duplicate symbols per user
-WatchlistSchema.index({ userId: 1, symbol: 1 }, { unique: true });
+// 允许同一股票出现在多个分组（旧索引：{ userId, symbol }）
+// 新索引：每个用户的每个分组中，每个股票只能出现一次
+WatchlistSchema.index({ userId: 1, symbol: 1, groupId: 1 }, { unique: true });
+// 查询优化：按用户和分组查询
+WatchlistSchema.index({ userId: 1, groupId: 1 });
 
 export const Watchlist: Model<WatchlistItem> =
     (models?.Watchlist as Model<WatchlistItem>) || model<WatchlistItem>('Watchlist', WatchlistSchema);

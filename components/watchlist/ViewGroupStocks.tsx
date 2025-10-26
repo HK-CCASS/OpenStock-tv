@@ -50,14 +50,14 @@ export default function ViewGroupStocks({
     }
   };
 
-  // 删除单个股票
+  // 删除单个股票（只从当前分组删除）
   const handleRemoveStock = (symbol: string, company: string) => {
-    if (!confirm(`确定要删除 ${symbol} (${company}) 吗？`)) {
+    if (!confirm(`确定要将 ${symbol} (${company}) 从 ${groupName} 中移除吗？`)) {
       return;
     }
 
     startTransition(async () => {
-      const result = await removeFromWatchlist(userId, symbol);
+      const result = await removeFromWatchlist(userId, symbol, groupId);
       
       if (result.success) {
         toast.success(`已从 ${groupName} 移除 ${symbol}`);
@@ -68,7 +68,7 @@ export default function ViewGroupStocks({
     });
   };
 
-  // 批量删除选中的股票
+  // 批量删除选中的股票（只从当前分组删除）
   const handleBatchRemove = () => {
     if (selectedStocks.size === 0) {
       toast.error('请先选择要删除的股票');
@@ -76,7 +76,7 @@ export default function ViewGroupStocks({
     }
 
     const selectedCount = selectedStocks.size;
-    if (!confirm(`确定要删除选中的 ${selectedCount} 支股票吗？此操作不可恢复。`)) {
+    if (!confirm(`确定要将选中的 ${selectedCount} 支股票从 ${groupName} 中移除吗？`)) {
       return;
     }
 
@@ -85,7 +85,7 @@ export default function ViewGroupStocks({
       let failCount = 0;
 
       for (const symbol of selectedStocks) {
-        const result = await removeFromWatchlist(userId, symbol);
+        const result = await removeFromWatchlist(userId, symbol, groupId);
         if (result.success) {
           successCount++;
         } else {
@@ -94,10 +94,10 @@ export default function ViewGroupStocks({
       }
 
       if (successCount > 0) {
-        toast.success(`成功删除 ${successCount} 支股票`);
+        toast.success(`已从 ${groupName} 移除 ${successCount} 支股票`);
       }
       if (failCount > 0) {
-        toast.error(`${failCount} 支股票删除失败`);
+        toast.error(`${failCount} 支股票移除失败`);
       }
 
       setSelectedStocks(new Set());
