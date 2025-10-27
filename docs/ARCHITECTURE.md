@@ -491,10 +491,12 @@ Event/Cron → Inngest → Workflow Function → Gemini AI → Nodemailer → Em
 
 ### 开发环境
 
+**本地开发**:
 ```
 localhost:3000 (Next.js Dev Server)
     ↓
-mongodb://localhost:27017 (Docker/Atlas)
+mongodb://localhost:27017 (Local MongoDB)
+redis://localhost:6379 (Local Redis)
     ↓
 Finnhub API (股票数据)
     ↓
@@ -502,6 +504,25 @@ TradingView WebSocket (实时报价)
     ↓
 Gemini API (AI 内容)
 ```
+
+**Docker 环境**:
+```
+localhost:3100 (Next.js in Docker)  # 非默认端口
+    ↓
+mongodb:27017 (Docker Container, mapped to localhost:27117)
+redis:6379 (Docker Container, mapped to localhost:6479)
+    ↓
+Finnhub API (股票数据)
+    ↓
+TradingView WebSocket (实时报价)
+    ↓
+Gemini API (AI 内容)
+```
+
+> **端口说明**:
+> - Docker 使用非默认端口避免冲突和提升安全性
+> - 容器内部仍使用标准端口（3000, 27017, 6379）
+> - 主机访问通过端口映射（3100, 27117, 6479）
 
 ### 生产环境 (Vercel)
 

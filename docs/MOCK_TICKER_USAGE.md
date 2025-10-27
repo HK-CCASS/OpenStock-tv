@@ -27,7 +27,8 @@ Mock Ticker 在开发环境（NODE_ENV=development）下**默认启用**。
 npm run dev
 
 # 访问热力图页面
-# http://localhost:3000/heatmap
+# 本地开发: http://localhost:3000/heatmap
+# Docker: http://localhost:3100/heatmap
 
 # ✅ 会看到控制台输出：
 # [SSE] Starting Mock Ticker with X symbols
@@ -65,11 +66,13 @@ npx tsx scripts/test-mock-ticker.ts
 npm run dev
 
 # 2. 登录并创建观察列表
-# 访问 http://localhost:3000/sign-in
+# 本地: http://localhost:3000/sign-in
+# Docker: http://localhost:3100/sign-in
 # 创建分组并添加股票（任意股票代码）
 
 # 3. 访问热力图
-# http://localhost:3000/heatmap
+# 本地: http://localhost:3000/heatmap
+# Docker: http://localhost:3100/heatmap
 
 # 4. 观察实时更新（1-3秒一次）
 # ✅ 股票价格会变化
@@ -317,5 +320,9 @@ Mock Ticker 是一个强大的开发和测试工具：
 
 ---
 
-**下一步**: 运行 `npm run dev` 并访问 http://localhost:3000/heatmap 查看实时更新效果！
+**下一步**: 
+- 本地开发: 运行 `npm run dev` 并访问 http://localhost:3000/heatmap
+- Docker: 运行 `docker compose up -d` 并访问 http://localhost:3100/heatmap
+
+查看实时更新效果！
 

@@ -14,22 +14,28 @@ npx tsx scripts/test-tradingview-ticker.ts
 
 ### 2. 启动开发服务器
 
+#### 本地开发环境
 ```bash
 npm run dev
 ```
+访问: **http://localhost:3000**
 
-访问: http://localhost:3000
+#### Docker 环境
+```bash
+docker compose up -d
+```
+访问: **http://localhost:3100** (非默认端口)
 
 ## 测试步骤
 
 ### 步骤 1: 准备测试数据（创建观察列表）
 
 #### 1.1 登录或注册账户
-- 访问 http://localhost:3000/sign-in
+- 访问 http://localhost:3000/sign-in (本地) 或 http://localhost:3100/sign-in (Docker)
 - 使用已有账户登录或创建新账户
 
 #### 1.2 创建观察列表分组
-- 访问 http://localhost:3000/watchlists
+- 访问 http://localhost:3000/watchlists (本地) 或 http://localhost:3100/watchlists (Docker)
 - 点击 "Create New Group" 或类似按钮
 - 创建至少 2 个分组并设置 `category` 字段：
 
@@ -69,7 +75,8 @@ npm run dev
 
 ### 步骤 2: 访问热力图页面
 
-访问: http://localhost:3000/heatmap
+**本地开发**: http://localhost:3000/heatmap  
+**Docker**: http://localhost:3100/heatmap
 
 ### 步骤 3: 验证初始加载
 

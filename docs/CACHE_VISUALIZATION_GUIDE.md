@@ -32,7 +32,12 @@ REDIS_URL=redis://localhost:6379
 # 其他必需配置
 FINNHUB_API_KEY=your_key_here
 BETTER_AUTH_SECRET=your_secret_here
+
+# 端口配置
+# 本地开发:
 BETTER_AUTH_URL=http://localhost:3000
+# Docker 部署:
+# BETTER_AUTH_URL=http://localhost:3100
 ```
 
 ---

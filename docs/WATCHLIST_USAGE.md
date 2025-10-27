@@ -11,7 +11,9 @@
 
 2. **访问股票详情页**：
    - 点击搜索结果中的股票
-   - 或直接访问：`http://localhost:3000/stocks/AAPL`
+   - 或直接访问：
+     - 本地开发：`http://localhost:3000/stocks/AAPL`
+     - Docker：`http://localhost:3100/stocks/AAPL`
 
 3. **添加到Watchlist**：
    - 在股票详情页右侧找到 "Add to Watchlist" 按钮
@@ -120,9 +122,8 @@ db.watchlists.find({userId: "YOUR_USER_ID"}).count()
 
 ### 方法1：访问Multi-Stock页面
 
-```
-http://localhost:3000/multi-stock
-```
+**本地开发**: `http://localhost:3000/multi-stock`  
+**Docker**: `http://localhost:3100/multi-stock`
 
 应该能看到添加的所有股票卡片，包含实时图表。
 
@@ -142,7 +143,9 @@ db.watchlistgroups.find({userId: "YOUR_USER_ID"}).pretty()
 
 ```javascript
 // 在浏览器控制台或Node.js环境
-fetch('http://localhost:3000/api/watchlist')
+// 本地开发使用 3000，Docker 使用 3100
+const port = 3000; // 或 3100 (Docker)
+fetch(`http://localhost:${port}/api/watchlist`)
   .then(r => r.json())
   .then(console.log)
 ```
@@ -164,7 +167,9 @@ npm run dev
 
 ### Step 2: 登录账户
 
-访问 `http://localhost:3000/sign-in` 并登录
+访问登录页面并登录：
+- 本地开发：`http://localhost:3000/sign-in`
+- Docker：`http://localhost:3100/sign-in`
 
 ### Step 3: 获取用户ID
 
@@ -183,7 +188,11 @@ db.user.find({email: "your@email.com"}, {id: 1})
 
 ### Step 5: 访问Multi-Stock页面
 
-访问 `http://localhost:3000/multi-stock`，应该能看到：
+访问 Multi-Stock 页面：
+- 本地开发：`http://localhost:3000/multi-stock`
+- Docker：`http://localhost:3100/multi-stock`
+
+应该能看到：
 
 ✅ 所有添加的股票卡片
 ✅ TradingView实时图表
