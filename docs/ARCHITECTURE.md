@@ -199,6 +199,9 @@ sequenceDiagram
 - ✅ **双层缓存架构（Redis + MongoDB）** 🆕
 - ✅ **多数据源容错（Yahoo Finance → Finnhub → 价格估算）** 🆕
 - ✅ **智能预缓存（添加股票时异步预热）** 🆕
+- ✅ **分批订阅系统（50 支/批，支持 500+ 股票）** ⭐ **NEW**
+- ✅ **订阅健康监控（每 5 分钟自动检查 + 修复）** ⭐ **NEW**
+- ✅ **性能优化（静默模式，内存降低 80-90%）** ⭐ **NEW**
 - ✅ TradingView WebSocket 实时报价
 - ✅ SSE 流式推送
 - ✅ 实时市值计算
@@ -208,14 +211,19 @@ sequenceDiagram
 **组件**:
 - `app/(root)/heatmap/page.tsx` - 热力图页面
 - `components/heatmap/UserHeatmap.tsx` - 热力图组件
-- `lib/tradingview/ticker.ts` - TradingView WebSocket 客户端
-- `lib/tradingview/sse-manager.ts` - SSE 连接管理
+- `lib/tradingview/ticker.ts` - TradingView WebSocket 客户端（分批订阅 + 健康监控）⭐
+- `lib/tradingview/sse-manager.ts` - SSE 连接管理（健康检查集成）⭐
+- `lib/tradingview/mock-ticker.ts` - Mock Ticker（测试模式）
 - `app/api/heatmap/stream/route.ts` - SSE API
 - `app/api/heatmap/user-data/route.ts` - 初始数据 API
-- `lib/actions/heatmap.actions.ts` - 市值缓存逻辑 🆕
+- `app/api/heatmap/subscription-health/route.ts` - 订阅健康检查 API ⭐ **NEW**
+- `app/api/heatmap/repair-subscriptions/route.ts` - 订阅修复 API ⭐ **NEW**
+- `lib/actions/heatmap.actions.ts` - 市值缓存逻辑（批次统一为 50）🆕
 - `lib/cache/market-cap-cache-manager.ts` - 双层缓存管理器 🆕
-- `lib/actions/yahoo-finance.actions.ts` - Yahoo Finance 适配器 🆕
+- `lib/actions/yahoo-finance.actions.ts` - Yahoo Finance 适配器（批次 50）🆕
 - `lib/redis/client.ts` - Redis 客户端 🆕
+- `scripts/check-subscription-health.ts` - 订阅健康检查脚本 ⭐ **NEW**
+- `scripts/repair-subscriptions.ts` - 订阅修复脚本 ⭐ **NEW**
 
 **数据流**:
 1. 查询用户 WatchlistGroups 和 Watchlists
@@ -224,9 +232,18 @@ sequenceDiagram
    - L1: Redis 查询（~1-2ms，命中率 ~90%）
    - L2: MongoDB 查询（~10-20ms，命中率 ~8%）
    - L3: API 调用（Yahoo Finance → Finnhub → 价格估算）
-4. TradingView WebSocket 获取实时报价
-5. SSE 推送到前端
-6. 前端计算实时市值并更新图表
+   - 所有数据源统一批次大小（50 支/批）⭐
+4. **TradingView WebSocket 分批订阅** ⭐:
+   - 每批 50 支股票，批次间延迟 200ms
+   - 500 支股票 = 10 批，总耗时 ~2 秒
+   - 自动处理动态添加的股票
+5. **订阅健康监控** ⭐:
+   - 每 5 分钟自动健康检查
+   - 检测未更新/过期的订阅
+   - 自动重新订阅失败的股票
+6. TradingView WebSocket 获取实时报价（静默模式）
+7. SSE 推送到前端
+8. 前端计算实时市值并更新图表
 
 ### 4. 多股票视图 (Multi-Stock)
 
