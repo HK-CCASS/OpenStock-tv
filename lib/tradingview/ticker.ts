@@ -33,8 +33,13 @@ export class TradingViewTicker {
   private verbose: boolean = false;
   private static readonly BATCH_SIZE = 50; // 每批订阅 50 支股票
   private static readonly BATCH_DELAY = 300; // 批次间延迟 300ms
-  private static readonly RECONNECT_DELAY = 500; // 重连间隔 500ms
   private statusLogTimer: NodeJS.Timeout | null = null; // 状态日志定时器
+  
+  // 指数退避策略配置
+  private reconnectAttempts: number = 0; // 重连尝试次数
+  private static readonly MAX_RECONNECT_ATTEMPTS = 10; // 最大重连次数
+  private static readonly BASE_RECONNECT_DELAY = 2000; // 基础延迟 2秒
+  private static readonly MAX_RECONNECT_DELAY = 60000; // 最大延迟 60秒
 
   constructor(symbols: string | string[], verbose: boolean = false) {
     this.symbols = Array.isArray(symbols) ? symbols : [symbols];
@@ -247,6 +252,9 @@ export class TradingViewTicker {
         });
 
         this.ws.on('open', async () => {
+          // 连接成功，重置重连计数器
+          this.reconnectAttempts = 0;
+          
           // 性能优化：禁用连接成功日志
           // if (this.verbose) {
           //   console.log('[TradingView] WebSocket connected');
@@ -276,17 +284,31 @@ export class TradingViewTicker {
           //   console.log('[TradingView] WebSocket closed');
           // }
           
-          // 自动重连
+          // 自动重连（使用指数退避策略）
           if (this.isRunning) {
-            // 性能优化：禁用重连日志
-            // if (this.verbose) {
-            //   console.log(`[TradingView] Reconnecting in ${TradingViewTicker.RECONNECT_DELAY}ms...`);
-            // }
+            // 检查是否达到最大重连次数
+            if (this.reconnectAttempts >= TradingViewTicker.MAX_RECONNECT_ATTEMPTS) {
+              console.error(
+                `[TradingView] ❌ Max reconnection attempts (${TradingViewTicker.MAX_RECONNECT_ATTEMPTS}) reached. Giving up.`
+              );
+              this.isRunning = false;
+              return;
+            }
+
+            // 计算指数退避延迟
+            const delay = this.getReconnectDelay();
+            this.reconnectAttempts++;
+
+            console.warn(
+              `[TradingView] ⚠️  Connection closed. Reconnecting in ${(delay / 1000).toFixed(1)}s ` +
+              `(attempt ${this.reconnectAttempts}/${TradingViewTicker.MAX_RECONNECT_ATTEMPTS})...`
+            );
+
             this.reconnectTimer = setTimeout(() => {
               this.start().catch(err => {
                 console.error('[TradingView] Reconnection failed:', err);
               });
-            }, TradingViewTicker.RECONNECT_DELAY);
+            }, delay);
           }
         });
       } catch (error) {
@@ -310,6 +332,9 @@ export class TradingViewTicker {
     // 停止状态日志
     this.stopStatusLog();
     
+    // 重置重连计数器
+    this.reconnectAttempts = 0;
+    
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -319,6 +344,19 @@ export class TradingViewTicker {
     // if (this.verbose) {
     //   console.log('[TradingView] Stopped');
     // }
+  }
+
+  /**
+   * 计算指数退避延迟
+   * 实现策略: 2s, 4s, 8s, 16s, 32s, 60s (max)
+   */
+  private getReconnectDelay(): number {
+    const exponentialDelay = 
+      TradingViewTicker.BASE_RECONNECT_DELAY * Math.pow(2, this.reconnectAttempts);
+    
+    const delay = Math.min(exponentialDelay, TradingViewTicker.MAX_RECONNECT_DELAY);
+    
+    return delay;
   }
 
   /**
