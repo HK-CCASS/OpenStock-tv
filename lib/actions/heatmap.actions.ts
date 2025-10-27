@@ -204,16 +204,8 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
     if (newCacheData.size > 0) {
       await MarketCapCacheManager.setMultiple(newCacheData);
       
-      // 临时调试日志：查看数据源统计
-      const sourceStats = { yahoo: 0, finnhub: 0, fallback: 0 };
-      newCacheData.forEach((data: any) => {
-        sourceStats[data.source as keyof typeof sourceStats]++;
-      });
-
-      console.log(
-        `[MarketCap Cache] ✅ Cached ${newCacheData.size} new symbols | ` +
-        `Yahoo: ${sourceStats.yahoo} | Finnhub: ${sourceStats.finnhub} | Fallback: ${sourceStats.fallback}`
-      );
+    // 性能优化：禁用缓存写入日志
+    // console.log(`[MarketCap Cache] ✅ Cached ${newCacheData.size} new symbols`);
     }
 
     return resultMap;

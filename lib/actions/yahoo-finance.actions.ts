@@ -80,11 +80,8 @@ export async function getBatchQuotesFromYahoo(
       });
     });
 
-    // 临时调试日志：查看 Yahoo Finance 使用情况
-    console.log(
-      `[Yahoo Finance] ✅ Fetched ${resultMap.size}/${symbols.length} quotes | ` +
-      `Symbols: ${Array.from(resultMap.keys()).slice(0, 5).join(', ')}${resultMap.size > 5 ? '...' : ''}`
-    );
+    // 性能优化：禁用成功日志
+    // console.log(`[Yahoo Finance] ✅ Fetched ${resultMap.size}/${symbols.length} quotes`);
 
     return resultMap;
   } catch (error) {
