@@ -131,8 +131,8 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
       `Hit rate: ${((resultMap.size / normalizedSymbols.length) * 100).toFixed(1)}%`
     );
 
-    // 3️⃣ 从 Yahoo Finance 获取缺失数据（批量最多 100 个）
-    const yahooQuotes = await fetchInBatches(missingSymbols, 100, getBatchQuotesFromYahoo);
+    // 3️⃣ 从 Yahoo Finance 获取缺失数据（批量每批 50 个，与订阅机制保持一致）
+    const yahooQuotes = await fetchInBatches(missingSymbols, 50, getBatchQuotesFromYahoo);
     const yahooSymbols = new Set(yahooQuotes.keys());
     const remainingSymbols = missingSymbols.filter(s => !yahooSymbols.has(s));
 
