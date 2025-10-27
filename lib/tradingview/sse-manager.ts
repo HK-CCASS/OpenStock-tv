@@ -211,7 +211,16 @@ class SSEManager {
     // 每5分钟检查一次订阅健康状态
     this.healthCheckInterval = setInterval(() => {
       if (this.ticker && 'logSubscriptionHealth' in this.ticker) {
+        // 1. 检查健康状态（输出警告日志）
         this.ticker.logSubscriptionHealth();
+        
+        // 2. 自动修复未订阅的股票
+        if ('autoRepairSubscriptions' in this.ticker) {
+          const repairedCount = this.ticker.autoRepairSubscriptions();
+          if (repairedCount > 0) {
+            console.warn(`[SSE] Auto-repaired ${repairedCount} subscriptions`);
+          }
+        }
       }
     }, 5 * 60 * 1000); // 5 分钟
   }

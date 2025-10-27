@@ -402,5 +402,48 @@ export class TradingViewTicker {
       }
     }
   }
+
+  /**
+   * 自动修复：重新订阅未接收更新的股票
+   * 返回重新订阅的股票数量
+   */
+  public autoRepairSubscriptions(): number {
+    const stats = this.getSubscriptionStats();
+    const now = Date.now();
+    const repairThreshold = 10 * 60 * 1000; // 10 分钟
+
+    // 找出需要修复的股票（从未更新 或 超过10分钟未更新）
+    const symbolsToRepair: string[] = [];
+
+    this.states.forEach((state, symbol) => {
+      const lastUpdate = state.lastUpdate || 0;
+      
+      // 从未接收更新
+      if (lastUpdate === 0) {
+        symbolsToRepair.push(symbol);
+      }
+      // 超过10分钟未更新（可能订阅失效）
+      else if (now - lastUpdate > repairThreshold) {
+        symbolsToRepair.push(symbol);
+      }
+    });
+
+    if (symbolsToRepair.length > 0 && this.ws?.readyState === WebSocket.OPEN) {
+      console.warn(`[TradingView] Auto-repairing ${symbolsToRepair.length} symbols:`, 
+        symbolsToRepair.slice(0, 10));
+
+      // 重新订阅
+      const q = this.createRandomToken();
+      const qs = 'qs_' + q;
+      const qsl = 'qs_snapshoter_basic-symbol-quotes_' + q;
+
+      this.sendMessage('quote_add_symbols', [qsl, ...symbolsToRepair]);
+      this.sendMessage('quote_fast_symbols', [qs, ...symbolsToRepair]);
+
+      return symbolsToRepair.length;
+    }
+
+    return 0;
+  }
 }
 

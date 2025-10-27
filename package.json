@@ -14,7 +14,8 @@
     "test:multigroup": "npx tsx scripts/test-watchlist-multi-group.ts",
     "cache:check": "npx tsx scripts/check-cache-status.ts",
     "cache:visualize": "npx tsx scripts/visualize-cache.ts",
-    "subscription:health": "npx tsx scripts/check-subscription-health.ts"
+    "subscription:health": "npx tsx scripts/check-subscription-health.ts",
+    "subscription:repair": "npx tsx scripts/repair-subscriptions.ts"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",
