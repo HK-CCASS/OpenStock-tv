@@ -10,18 +10,25 @@ OpenStock 提供完整的 Docker Compose 配置，支持一键部署完整的应
 ┌─────────────────────────────────────┐
 │  OpenStock App (Next.js)            │
 │  Container: openstock-app           │
-│  Port: 3000                         │
+│  Host Port: 3100 → Container: 3000  │
 └──────────────┬──────────────────────┘
                │
                │ openstock-network
                │
-┌──────────────┴──────────────────────┐
-│  MongoDB 7                          │
-│  Container: mongodb                 │
-│  Port: 27017                        │
-│  Volumes: mongo-data, mongo-config  │
-└─────────────────────────────────────┘
+       ┌───────┴────────┐
+       │                │
+┌──────┴──────┐  ┌──────┴──────┐
+│ MongoDB 7   │  │ Redis 7     │
+│ mongodb     │  │ redis       │
+│ 27117→27017 │  │ 6479→6379   │
+│ mongo-data  │  │ redis-data  │
+└─────────────┘  └─────────────┘
 ```
+
+**端口映射说明**：
+- `3100→3000`: 主机端口 3100 映射到容器内部 3000
+- `27117→27017`: MongoDB 非默认端口，避免冲突
+- `6479→6379`: Redis 非默认端口，提升安全性
 
 ## 快速开始
 
@@ -56,12 +63,18 @@ nano .env
 # Core
 NODE_ENV=production
 
-# Database (Docker 内部网络)
+# Database (Docker 内部网络 - 容器内访问)
 MONGODB_URI=mongodb://root:example@mongodb:27017/openstock?authSource=admin
+
+# Database (主机网络 - 外部工具访问)
+# MONGODB_URI=mongodb://root:example@localhost:27117/openstock?authSource=admin
+
+# Redis (主机网络 - 外部工具访问)
+# REDIS_URL=redis://localhost:6479
 
 # Better Auth
 BETTER_AUTH_SECRET=your_random_secret_here_min_32_chars
-BETTER_AUTH_URL=http://localhost:3000
+BETTER_AUTH_URL=http://localhost:3100
 
 # Finnhub API
 FINNHUB_API_KEY=your_finnhub_api_key_here
@@ -99,8 +112,9 @@ docker compose ps
 
 # 预期输出:
 # NAME              STATUS          PORTS
-# mongodb           Up (healthy)    0.0.0.0:27017->27017/tcp
-# openstock-app     Up (healthy)    0.0.0.0:3000->3000/tcp
+# mongodb           Up (healthy)    0.0.0.0:27117->27017/tcp
+# openstock-redis   Up (healthy)    0.0.0.0:6479->6379/tcp
+# openstock-app     Up (healthy)    0.0.0.0:3100->3000/tcp
 
 # 查看应用日志
 docker compose logs -f openstock
@@ -111,7 +125,9 @@ docker compose logs -f mongodb
 
 ### 步骤 5: 访问应用
 
-打开浏览器访问: http://localhost:3000
+打开浏览器访问: http://localhost:3100
+
+**注意**: 使用非默认端口以提升安全性并避免端口冲突
 
 ## 服务配置详解
 
@@ -125,7 +141,7 @@ openstock:
       - "mongodb:host-gateway"    # 允许访问主机的 MongoDB
   container_name: openstock-app
   ports:
-    - "3000:3000"                 # 映射端口
+    - "3100:3000"                 # 映射端口 (主机:容器)
   env_file:
     - .env                        # 加载环境变量
   environment:
@@ -157,7 +173,7 @@ mongodb:
     MONGO_INITDB_ROOT_PASSWORD: example
     MONGO_INITDB_DATABASE: openstock
   ports:
-    - "27017:27017"
+    - "27117:27017"               # 非默认端口
   volumes:
     - mongo-data:/data/db         # 数据持久化
     - mongo-config:/data/configdb # 配置持久化
@@ -231,8 +247,11 @@ docker compose ps -a
 ### 数据库管理
 
 ```bash
-# 进入 MongoDB 容器
+# 进入 MongoDB 容器（容器内部使用 27017）
 docker compose exec mongodb mongosh -u root -p example
+
+# 从主机连接 MongoDB（使用 27117）
+mongosh mongodb://root:example@localhost:27117/openstock?authSource=admin
 
 # 备份数据库
 docker compose exec mongodb mongodump --uri="mongodb://root:example@localhost:27017/openstock?authSource=admin" --out=/data/backup
@@ -304,31 +323,48 @@ Docker Compose 创建了一个名为 `openstock-network` 的桥接网络：
 
 ```
 openstock-app (3000) ←→ openstock-network ←→ mongodb (27017)
+                                           ←→ redis (6379)
+
+主机端口映射:
+- localhost:3100 → openstock-app:3000
+- localhost:27117 → mongodb:27017
+- localhost:6479 → redis:6379
 ```
 
 ### 外部访问
 
 ```bash
 # 应用端口（外部 → 内部）
-localhost:3000 → openstock-app:3000
+localhost:3100 → openstack-app:3000
 
 # MongoDB 端口（外部 → 内部）
-localhost:27017 → mongodb:27017
+localhost:27117 → mongodb:27017
+
+# Redis 端口（外部 → 内部）
+localhost:6479 → redis:6379
 ```
+
+**为什么使用非默认端口？**
+- ✅ 避免与本地开发环境端口冲突
+- ✅ 降低自动扫描攻击的命中率
+- ✅ 提升生产环境安全性
 
 ### 防火墙配置
 
 生产环境建议：
-- ✅ 开放 3000 端口（应用）
-- ⚠️ 限制 27017 端口（仅内部网络）
+- ✅ 开放 3100 端口（应用）
+- ⚠️ 限制 27117 端口（仅内部网络）
+- ⚠️ 限制 6479 端口（仅内部网络）
 
 ```bash
 # Ubuntu/Debian
-sudo ufw allow 3000/tcp
-sudo ufw deny 27017/tcp
+sudo ufw allow 3100/tcp
+sudo ufw deny 27117/tcp
+sudo ufw deny 6479/tcp
 
-# 或仅允许特定 IP
-sudo ufw allow from 192.168.1.0/24 to any port 27017
+# 或仅允许特定 IP 访问数据库
+sudo ufw allow from 192.168.1.0/24 to any port 27117
+sudo ufw allow from 192.168.1.0/24 to any port 6479
 ```
 
 ## 数据持久化
@@ -363,8 +399,8 @@ docker run --rm -v openstock-tv_mongo-data:/data \
 ### 应用健康检查
 
 ```bash
-# 手动检查应用健康
-curl -f http://localhost:3000 || echo "App is down"
+# 手动检查应用健康（从主机访问）
+curl -f http://localhost:3100 || echo "App is down"
 
 # Docker 健康状态
 docker compose ps
@@ -402,8 +438,10 @@ healthcheck:
 docker compose logs openstock
 
 # 检查端口占用
-lsof -i :3000
-netstat -tuln | grep 3000
+lsof -i :3100
+lsof -i :27117
+lsof -i :6479
+netstat -tuln | grep -E "3100|27117|6479"
 
 # 检查环境变量
 docker compose config
@@ -415,9 +453,12 @@ docker compose config
 # 验证 MongoDB 运行状态
 docker compose ps mongodb
 
-# 测试连接
+# 测试连接（容器内部使用 3000）
 docker compose exec openstock \
   wget -qO- http://localhost:3000/api/health
+
+# 从主机测试（使用 3100）
+curl http://localhost:3100/api/health
 
 # 检查网络
 docker network inspect openstock-tv_openstock-network
@@ -485,7 +526,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 2. **限制网络访问**:
    ```yaml
    ports:
-     - "127.0.0.1:27017:27017"  # 仅本地访问
+     - "127.0.0.1:27117:27017"  # 仅本地访问 MongoDB
+     - "127.0.0.1:6479:6379"    # 仅本地访问 Redis
    ```
 
 3. **使用 HTTPS**:
@@ -506,7 +548,7 @@ server {
     server_name your-domain.com;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3100;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';

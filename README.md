@@ -207,7 +207,9 @@ pnpm build && pnpm start
 npm run build && npm start
 ```
 
-Open http://localhost:3000 to view the app.
+Open http://localhost:3000 to view the app (local development).
+
+**Note**: For Docker deployment, the app runs on **http://localhost:3100** (non-default port).
 
 ## 🐳 Docker Setup
 
@@ -238,9 +240,16 @@ docker compose up -d --build
 ```
 
 5) Access the app:
-- **App**: http://localhost:3000
-- **MongoDB**: Available at `mongodb:27017` (inside Docker network) or `localhost:27017` (from host)
-- **Redis**: Available at `openstock-redis:6379` (inside Docker network) or `localhost:6379` (from host)
+- **App**: http://localhost:3100 (**非默认端口 3100**)
+- **MongoDB**: Available at `mongodb:27017` (inside Docker network) or `localhost:27117` (from host, **非默认端口**)
+- **Redis**: Available at `openstock-redis:6379` (inside Docker network) or `localhost:6479` (from host, **非默认端口**)
+
+**为什么使用非默认端口？**
+- ✅ 避免与本地开发环境端口冲突
+- ✅ 降低自动端口扫描攻击风险
+- ✅ 提升生产环境安全性
+
+详见: [端口配置文档](docs/PORT_CONFIGURATION.md)
 
 Notes
 - The app service depends_on the mongodb service.
@@ -258,7 +267,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
     ports:
-      - "27017:27017"
+      - "27117:27017"  # 非默认端口
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -272,7 +281,7 @@ services:
     container_name: openstock-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6479:6379"  # 非默认端口
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
@@ -300,12 +309,14 @@ NODE_ENV=development
 MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>/<db>?retryWrites=true&w=majority
 
 # Redis (L1 Cache) - Optional but recommended
-REDIS_URL=redis://localhost:6379
+# For Docker: Use localhost:6479 (non-default port)
+REDIS_URL=redis://localhost:6479
 # Note: If Redis is unavailable, system auto-falls back to MongoDB-only caching
 
 # Better Auth
 BETTER_AUTH_SECRET=your_better_auth_secret
-BETTER_AUTH_URL=http://localhost:3000
+# For Docker: Use localhost:3100 (non-default port)
+BETTER_AUTH_URL=http://localhost:3100
 
 # Market Data Sources
 # Yahoo Finance - Primary market cap source (no API key needed, batch 100 stocks)
@@ -337,12 +348,12 @@ MONGODB_URI=mongodb://root:example@mongodb:27017/openstock?authSource=admin
 
 # Redis (Docker L1 Cache)
 REDIS_URL=redis://openstock-redis:6379
-# Note: Use 'openstock-redis' as hostname inside Docker network
-# Note: Use 'localhost:6379' if connecting from host machine
+# Note: Use 'openstock-redis:6379' as hostname inside Docker network
+# Note: Use 'localhost:6479' (non-default port) if connecting from host machine
 
 # Better Auth
 BETTER_AUTH_SECRET=your_better_auth_secret
-BETTER_AUTH_URL=http://localhost:3000
+BETTER_AUTH_URL=http://localhost:3100  # Docker uses non-default port 3100
 
 # Market Data Sources
 # Yahoo Finance - Primary market cap source (no API key needed, batch 100 stocks)

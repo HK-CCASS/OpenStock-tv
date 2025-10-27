@@ -9,7 +9,7 @@ services:
         - "mongodb:host-gateway"
     container_name: openstock-app
     ports:
-      - "3000:3000"
+      - "3100:3000"
     env_file:
       - .env
     environment:
@@ -39,7 +39,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
       MONGO_INITDB_DATABASE: openstock
     ports:
-      - "27017:27017"
+      - "27117:27017"
     volumes:
       - mongo-data:/data/db
       - mongo-config:/data/configdb
@@ -57,7 +57,7 @@ services:
     container_name: openstock-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6479:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes

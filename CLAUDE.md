@@ -139,8 +139,12 @@ scripts/              # 脚本文件
 
 ### 环境变量
 必需的环境变量包括：
-- `MONGODB_URI` - MongoDB 连接字符串（例：`mongodb://root:example@localhost:27017/openstock?authSource=admin`）
-- `REDIS_URL` - Redis 连接字符串（例：`redis://localhost:6379`，可选，缺失时自动降级）
+- `MONGODB_URI` - MongoDB 连接字符串
+  - Docker 容器内: `mongodb://root:example@mongodb:27017/openstock?authSource=admin`
+  - 主机访问: `mongodb://root:example@localhost:27117/openstock?authSource=admin` (非默认端口 27117)
+- `REDIS_URL` - Redis 连接字符串（可选，缺失时自动降级）
+  - Docker 容器内: `redis://redis:6379`
+  - 主机访问: `redis://localhost:6479` (非默认端口 6479)
 - `BETTER_AUTH_SECRET` - Better Auth 密钥
 - `BETTER_AUTH_URL` - Better Auth URL
 - `FINNHUB_API_KEY` - Finnhub API 密钥（备用数据源）
