@@ -42,9 +42,30 @@ export async function createWatchlistGroup(
     try {
         await connectToDatabase();
 
+        const trimmedName = name.trim();
+
+        // 检查是否存在软删除的同名分组
+        const existingGroup = await WatchlistGroup.findOne({
+            userId,
+            name: trimmedName,
+            isActive: false, // 只查找已删除的
+        });
+
+        if (existingGroup) {
+            // 重新激活已删除的分组（保留历史数据）
+            existingGroup.isActive = true;
+            if (category !== undefined) {
+                existingGroup.category = category?.trim();
+            }
+            await existingGroup.save();
+            
+            return { success: true, groupId: existingGroup._id.toString() };
+        }
+
+        // 创建新分组
         const newGroup = await WatchlistGroup.create({
             userId,
-            name: name.trim(),
+            name: trimmedName,
             category: category?.trim(),
             isSystem: false,
             isActive: true,
