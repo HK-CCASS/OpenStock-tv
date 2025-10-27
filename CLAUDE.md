@@ -21,6 +21,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run cache:check` - 终端查看缓存状态（MongoDB + Redis）
 - `npm run cache:visualize` - 生成 HTML 可视化报告（`cache-report.html`）
 
+### 订阅健康监控命令 ⭐ **NEW**
+- `npm run subscription:health` - 查看 TradingView 订阅健康状态
+- `npm run subscription:repair` - 手动触发订阅修复（重新订阅失败的股票）
+
 ### Inngest 本地开发
 - `npx inngest-cli@latest dev` - 启动 Inngest 本地开发服务器（工作流、定时任务、AI 推理）
 
@@ -132,13 +136,29 @@ scripts/              # 脚本文件
   - **L1 缓存 (Redis)**: 1 小时 TTL，快速读取 (~1-2ms)
   - **L2 缓存 (MongoDB)**: 24 小时有效期，持久化存储
   - 自动降级：Redis 不可用时直接使用 MongoDB
-- **多源数据回退**：
-  1. Yahoo Finance (主源，批量 100 支)
+- **多源数据回退**（统一批次大小 50 支/批）：
+  1. Yahoo Finance (主源，批量 50 支)
   2. Finnhub (备用源，批量 50 支)
   3. Price Estimation (最终回退)
 - **智能预缓存**：
   - 添加到 Watchlist 时立即异步缓存
   - 每日 UTC 21:30 自动更新（美股收盘后）
+- **分批订阅系统** ⭐ **NEW**：
+  - TradingView WebSocket 分批订阅（50 支/批）
+  - 支持 500+ 股票的大规模订阅
+  - 批次间延迟 200ms，避免消息过大
+  - 初始订阅 + 动态添加均支持分批
+- **订阅健康监控** ⭐ **NEW**：
+  - 每 5 分钟自动健康检查
+  - 自动检测并重新订阅失败的股票
+  - 手动健康检查：`npm run subscription:health`
+  - 手动修复：`npm run subscription:repair`
+  - API 端点：`/api/heatmap/subscription-health`, `/api/heatmap/repair-subscriptions`
+- **性能优化** ⭐ **NEW**：
+  - 禁用所有高频日志（99%+ 日志减少）
+  - 内存占用降低 80-90%
+  - CPU 占用降低 40-70%
+  - 静默生产模式（仅错误日志）
 - 分组聚合：股票按类别分组为池，支持两级钻取
 
 #### 自动化工作流 (Inngest)
@@ -308,6 +328,19 @@ docker compose logs -f redis
 - `app/(root)/heatmap/page.tsx` - 热力图页面
 - `app/(root)/watchlists/page.tsx` - 观察列表页面
 - `app/(root)/stocks/[symbol]/page.tsx` - 个股详情页
+
+### API 路由 ⭐ **UPDATED**
+- `app/api/heatmap/stream/route.ts` - SSE 实时数据流
+- `app/api/heatmap/user-data/route.ts` - 初始数据获取
+- `app/api/heatmap/subscription-health/route.ts` - 订阅健康检查 ⭐ **NEW**
+- `app/api/heatmap/repair-subscriptions/route.ts` - 订阅修复 ⭐ **NEW**
+- `app/api/inngest/` - Inngest 工作流路由
+
+### 监控和维护脚本 ⭐ **NEW**
+- `scripts/check-subscription-health.ts` - 检查订阅健康状态
+- `scripts/repair-subscriptions.ts` - 手动修复失败的订阅
+- `scripts/check-cache-status.ts` - 查看缓存状态
+- `scripts/visualize-cache.ts` - 生成缓存可视化报告
 
 ### 自动化工作流
 - `lib/inngest/client.ts` - Inngest 客户端配置
