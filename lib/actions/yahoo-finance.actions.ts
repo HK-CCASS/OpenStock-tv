@@ -58,9 +58,10 @@ export async function getBatchQuotesFromYahoo(
       });
     });
 
-    console.log(
-      `[Yahoo Finance] ✅ Fetched ${resultMap.size}/${symbols.length} quotes`
-    );
+    // 性能优化：禁用高频日志
+    // console.log(
+    //   `[Yahoo Finance] ✅ Fetched ${resultMap.size}/${symbols.length} quotes`
+    // );
 
     return resultMap;
   } catch (error) {
@@ -96,13 +97,15 @@ async function fetchSymbolsOneByOne(
         previousClose,
       });
     } catch (error) {
-      console.warn(`[Yahoo Finance] ⚠️ Failed to fetch ${symbol}`);
+      // 性能优化：禁用单个股票失败日志（高频）
+      // console.warn(`[Yahoo Finance] ⚠️ Failed to fetch ${symbol}`);
     }
   }
 
-  console.log(
-    `[Yahoo Finance] Fallback: fetched ${resultMap.size}/${symbols.length} quotes`
-  );
+  // 性能优化：禁用回退模式日志
+  // console.log(
+  //   `[Yahoo Finance] Fallback: fetched ${resultMap.size}/${symbols.length} quotes`
+  // );
 
   return resultMap;
 }

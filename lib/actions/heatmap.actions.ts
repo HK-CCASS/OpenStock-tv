@@ -122,14 +122,16 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
     const missingSymbols = normalizedSymbols.filter(s => !resultMap.has(s));
 
     if (missingSymbols.length === 0) {
-      console.log(`[MarketCap Cache] ✅ All symbols cached (hit rate: 100%)`);
+      // 性能优化：禁用缓存命中日志（高频）
+      // console.log(`[MarketCap Cache] ✅ All symbols cached (hit rate: 100%)`);
       return resultMap;
     }
 
-    console.log(
-      `[MarketCap Cache] Cache miss: ${missingSymbols.length} symbols | ` +
-      `Hit rate: ${((resultMap.size / normalizedSymbols.length) * 100).toFixed(1)}%`
-    );
+    // 性能优化：禁用缓存未命中统计日志
+    // console.log(
+    //   `[MarketCap Cache] Cache miss: ${missingSymbols.length} symbols | ` +
+    //   `Hit rate: ${((resultMap.size / normalizedSymbols.length) * 100).toFixed(1)}%`
+    // );
 
     // 3️⃣ 从 Yahoo Finance 获取缺失数据（批量每批 50 个，与订阅机制保持一致）
     const yahooQuotes = await fetchInBatches(missingSymbols, 50, getBatchQuotesFromYahoo);
@@ -139,6 +141,7 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
     // 4️⃣ Yahoo Finance 失败的股票，回退到 Finnhub
     let finnhubQuotes = new Map();
     if (remainingSymbols.length > 0) {
+      // 保留警告日志（重要）：表示主数据源失败
       console.warn(
         `[MarketCap Cache] Yahoo failed for ${remainingSymbols.length} symbols, falling back to Finnhub`
       );
@@ -158,9 +161,10 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
       if (!isValid) {
         marketCap = (data.price || 1) * 1000000000;
         source = 'fallback';
-        console.warn(
-          `[MarketCap] ${symbol} 市值无效 (Yahoo: ${data.marketCap})，使用估算: ${(marketCap / 1e9).toFixed(2)}B`
-        );
+        // 性能优化：禁用市值无效警告（高频）
+        // console.warn(
+        //   `[MarketCap] ${symbol} 市值无效 (Yahoo: ${data.marketCap})，使用估算: ${(marketCap / 1e9).toFixed(2)}B`
+        // );
       }
 
       const cacheEntry = {
@@ -200,15 +204,16 @@ export async function getMarketCapCache(symbols: string[]): Promise<Map<string, 
     if (newCacheData.size > 0) {
       await MarketCapCacheManager.setMultiple(newCacheData);
       
-      const sourceStats = { yahoo: 0, finnhub: 0, fallback: 0 };
-      newCacheData.forEach((data: any) => {
-        sourceStats[data.source as keyof typeof sourceStats]++;
-      });
+      // 性能优化：禁用缓存写入日志（高频）
+      // const sourceStats = { yahoo: 0, finnhub: 0, fallback: 0 };
+      // newCacheData.forEach((data: any) => {
+      //   sourceStats[data.source as keyof typeof sourceStats]++;
+      // });
 
-      console.log(
-        `[MarketCap Cache] ✅ Cached ${newCacheData.size} new symbols | ` +
-        `Yahoo: ${sourceStats.yahoo} | Finnhub: ${sourceStats.finnhub} | Fallback: ${sourceStats.fallback}`
-      );
+      // console.log(
+      //   `[MarketCap Cache] ✅ Cached ${newCacheData.size} new symbols | ` +
+      //   `Yahoo: ${sourceStats.yahoo} | Finnhub: ${sourceStats.finnhub} | Fallback: ${sourceStats.fallback}`
+      // );
     }
 
     return resultMap;
