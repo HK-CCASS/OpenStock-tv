@@ -199,10 +199,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             // 这样可以保持不同价格股票的相对大小合理
             marketCap = (cell.last || 1) * 1000000000;
             usedFallback = true;
-            console.warn(
-              `[Heatmap] ${cell.symbol} 市值数据异常 (原值: ${cell.marketCap})，` +
-              `使用回退值: ${(marketCap / 1000000000).toFixed(2)}B (价格 × 1B)`
-            );
+            // 性能优化：移除高频警告日志
           }
 
           return {
@@ -270,13 +267,13 @@ export default function UserHeatmap({ userId }: { userId: string }) {
         eventSourceRef.current.close();
       }
 
-      console.log(`[SSE] Connecting... (attempt ${retryCount + 1}/${maxRetries + 1})`);
+      // 性能优化：移除连接调试日志
 
       const eventSource = new EventSource('/api/heatmap/stream');
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
-        console.log('[SSE] Connected successfully');
+        // 性能优化：移除连接成功日志
         setSseConnected(true);
         retryCount = 0; // 重置重试计数
         lastMessageTime = Date.now();
@@ -287,7 +284,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           const timeout = 30000; // 30 秒超时
 
           if (timeSinceLastMessage > timeout) {
-            console.warn('[SSE] Connection timeout (no message for 30s), reconnecting...');
+            // 性能优化：移除超时警告日志
             eventSource.close();
             setSseConnected(false);
             attemptReconnect();
@@ -303,13 +300,13 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
           // 连接确认消息
           if (update.type === 'connected') {
-            console.log('[SSE] Connection confirmed:', update.clientId);
+            // 性能优化：移除连接确认日志
             return;
           }
 
           // 心跳消息
           if (update.type === 'heartbeat') {
-            console.log('[SSE] Heartbeat received');
+            // 性能优化：移除心跳日志（高频）
             return;
           }
 
@@ -318,6 +315,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
             scheduleUpdate(update);
           }
         } catch (err) {
+          // 保留错误日志（低频，重要）
           console.error('[SSE] Failed to parse message:', err);
         }
       };
@@ -333,6 +331,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
     const attemptReconnect = () => {
       if (retryCount >= maxRetries) {
+        // 保留最大重试错误日志（重要）
         console.error('[SSE] Max retries reached, giving up');
         setError('实时连接失败，请刷新页面重试');
         return;
@@ -340,7 +339,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
       // 指数退避：1s, 2s, 4s, 8s, 16s（最大 30s）
       const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
-      console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+      // 性能优化：移除重连调试日志
 
       reconnectTimer = setTimeout(() => {
         retryCount++;
@@ -444,7 +443,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       // 二级视图：只显示选中 pool 的股票
       const pool = data.pools.find((p) => p.poolName === selectedPool);
       if (!pool) {
-        console.error('[buildChartOption] 找不到选中的 pool:', selectedPool);
+        // 性能优化：静默处理（由调用方处理）
         return null;
       }
 
@@ -500,7 +499,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
     return {
       backgroundColor: '#1a1a1a',
-      animation: false,  // 禁用动画，提升性能
+      animation: false,              // 禁用全局动画
+      animationDuration: 0,          // 动画持续时间设为 0
+      animationDelay: 0,             // 动画延迟设为 0
       grid: {
         left: 0,
         right: 0,
@@ -570,16 +571,21 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           right: 0,
           top: 0,
           bottom: 0,
-          roam: false,                    // 临时禁用缩放（排查卡顿问题）
+          // 动画禁用（Series 级别）
+          animation: false,
+          animationDuration: 0,
+          roam: false,                    // 禁用缩放/平移
           // scaleLimit: {
           //   min: 1,                       // 最小缩放比例
           //   max: 5,                       // 最大缩放比例（放大 5 倍查看小股票）
           // },
           nodeClick: selectedPool ? false : 'link',
           leafDepth: selectedPool ? 1 : 2, // 二级视图显示 1 层（修复），一级视图显示 2 层
-          squareRatio: 0.5,  // 降低比例，更接近正方形
-          visibleMin: 1,    // 最小可见面积（像素²），设为1确保所有内容都显示
-          childrenVisibleMin: 1,  // 子节点最小可见面积
+          // 保持 0.5 的比例，确保方形布局
+          squareRatio: 0.5,
+          // 适度提高最小可见面积，确保文本有足够空间，同时不过度隐藏小方块
+          visibleMin: 50,
+          childrenVisibleMin: 25,
           breadcrumb: {
             show: false,
           },
@@ -594,100 +600,47 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
           label: {
             show: true,
+            position: 'inside',  // 明确指定标签在内部
             fontSize: 11,
             fontWeight: 'bold',
             color: '#fff',
+            // 居中对齐配置
+            align: 'center',
+            verticalAlign: 'middle',
+            // 内部边距，确保文本不贴边
+            padding: [4, 6, 4, 6],
             formatter: function (params: any) {
               const stock = params.data?.stockData;
               if (!stock) return '';
-              
+
               const sign = stock.changePercent >= 0 ? '+' : '';
-              
-              // 默认显示完整信息（股票名 + 股价 + 涨跌幅）
-              // 让 ECharts 自动处理文字溢出（overflow: 'truncate'）
-              return `${stock.symbol}\n$${stock.last.toFixed(2)}\n${sign}${stock.changePercent.toFixed(2)}%`;
+
+              // 构建多行文本，确保每行都有适当的间距
+              const lines = [
+                stock.symbol,
+                `$${stock.last.toFixed(2)}`,
+                `${sign}${stock.changePercent.toFixed(2)}%`
+              ];
+
+              // 返回多行文本，ECharts 会自动处理居中
+              return lines.join('\n');
             },
-            rich: {
-              symbolLarge: {
-                fontSize: 16,                 // 加大字体
-                fontWeight: 'bold',
-                color: '#fff',
-                lineHeight: 22,
-                shadowBlur: 2,                 // 添加文字阴影
-                shadowColor: 'rgba(0, 0, 0, 0.8)',
-              },
-              symbolMedium: {
-                fontSize: 14,
-                fontWeight: 'bold',
-                color: '#fff',
-                lineHeight: 20,
-                shadowBlur: 2,
-                shadowColor: 'rgba(0, 0, 0, 0.8)',
-              },
-              symbolSmall: {
-                fontSize: 11,
-                fontWeight: 'bold',
-                color: '#fff',
-                lineHeight: 14,
-                shadowBlur: 1,
-                shadowColor: 'rgba(0, 0, 0, 0.8)',
-              },
-              price: {
-                fontSize: 13,                 // 加大字体
-                color: '#fff',
-                lineHeight: 19,
-                shadowBlur: 1,
-                shadowColor: 'rgba(0, 0, 0, 0.8)',
-              },
-              change: {
-                fontSize: 12,                 // 加大字体
-                fontWeight: 'bold',            // 加粗涨跌幅
-                color: '#fff',
-                lineHeight: 17,
-                shadowBlur: 1,
-                shadowColor: 'rgba(0, 0, 0, 0.8)',
-              },
-              changeSmall: {
-                fontSize: 10,
-                fontWeight: 'bold',
-                color: '#fff',
-                lineHeight: 14,
-                shadowBlur: 1,
-                shadowColor: 'rgba(0, 0, 0, 0.8)',
-              },
-              poolName: {
-                fontSize: 18,
-                fontWeight: 'bold',
-                color: '#fff',
-                lineHeight: 24,
-              },
-              poolStats: {
-                fontSize: 13,
-                color: '#ddd',
-                lineHeight: 20,
-              },
-              poolChange: {
-                fontSize: 14,
-                fontWeight: 'bold',
-                color: '#fff',
-                lineHeight: 20,
-              },
-            },
+            rich: {},
             overflow: 'truncate',
             ellipsis: '...',
           },
           upperLabel: {
-            show: true,
-            height: 20,                            // 再次减小高度（24 → 20）
+            show: false,  // 暂时隐藏 upperLabel，给股票方块更多空间
+            height: 16,   // 进一步减小高度
             color: '#ffffff',
-            fontSize: 10,                          // 再次减小字体（11 → 10）
+            fontSize: 10,
             fontWeight: 'bold',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)', // 半透明背景
-            borderColor: 'rgba(255, 255, 255, 0.2)', // 细边框
-            borderWidth: 1,                         // 细边框
-            borderRadius: 4,                        // 圆角
-            padding: [4, 8],                      // 减小内边距（[6, 10] → [4, 8]）
-            shadowBlur: 0,                         // 禁用阴影（性能优化）
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            borderWidth: 1,
+            borderRadius: 3,
+            padding: [2, 6],
+            shadowBlur: 0,
             shadowColor: 'rgba(0, 0, 0, 0)',
             shadowOffsetY: 0,
             formatter: function (params: any) {
@@ -803,11 +756,11 @@ export default function UserHeatmap({ userId }: { userId: string }) {
 
     // 使用 requestAnimationFrame 延迟到下一帧，确保流畅
     const rafId = requestAnimationFrame(() => {
-      // 使用优化的配置参数
+      // 使用优化的配置参数，显式禁用动画
       chart.setOption(chartOption, {
-        notMerge: false,  // 使用增量更新，提升性能
-        lazyUpdate: false, // 禁用批量更新，确保实时响应
-        silent: false,    // 允许触发事件（用户交互）
+        notMerge: false,    // 使用增量更新，提升性能
+        lazyUpdate: false,  // 禁用批量更新，确保实时响应
+        silent: false,      // 允许触发事件（用户交互）
       });
 
       // 异步 resize 确保尺寸正确

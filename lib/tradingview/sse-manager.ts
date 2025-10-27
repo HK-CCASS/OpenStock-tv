@@ -60,7 +60,7 @@ class SSEManager {
       this.symbolSubscribers.get(symbol)!.add(clientId);
     });
 
-    console.log(`[SSE] Client ${clientId} subscribed to ${symbols.length} symbols`);
+    // 性能优化：移除订阅日志
 
     // 如果 Ticker 未运行，启动它
     if (!this.isTickerRunning) {
@@ -96,7 +96,7 @@ class SSEManager {
       }
     });
 
-    console.log(`[SSE] Client ${clientId} unsubscribed`);
+    // 性能优化：移除取消订阅日志
 
     // 如果没有客户端了，停止 Ticker
     if (this.clients.size === 0) {
@@ -114,8 +114,7 @@ class SSEManager {
     const allSymbols = Array.from(this.symbolSubscribers.keys());
     if (allSymbols.length === 0) return;
 
-    const tickerType = USE_MOCK_TICKER ? 'Mock Ticker' : 'TradingView Ticker';
-    console.log(`[SSE] Starting ${tickerType} with ${allSymbols.length} symbols`);
+    // 性能优化：移除启动日志
 
     try {
       // 根据配置选择 Ticker 类型
@@ -141,9 +140,10 @@ class SSEManager {
         }, 1000);
       }
       
-      console.log(`[SSE] ${tickerType} started successfully`);
+      // 性能优化：移除启动成功日志
     } catch (error) {
-      console.error(`[SSE] Failed to start ${tickerType}:`, error);
+      // 保留错误日志（重要）
+      console.error(`[SSE] Failed to start Ticker:`, error);
       this.isTickerRunning = false;
       this.ticker = null;
     }
@@ -155,7 +155,7 @@ class SSEManager {
   private stopTicker(): void {
     if (!this.isTickerRunning || !this.ticker) return;
 
-    console.log('[SSE] Stopping TradingView Ticker');
+    // 性能优化：移除停止日志
     
     this.ticker.stop();
     this.ticker = null;

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     const symbols = watchlist.map(item => item.symbol);
     const clientId = `${session.user.id}-${Date.now()}`;
 
-    console.log(`[SSE API] Client ${clientId} connecting with ${symbols.length} symbols`);
+    // 性能优化：移除客户端连接日志
 
     // 4. 创建 SSE 流
     const stream = new ReadableStream({
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       },
       cancel() {
         // 客户端断开连接时清理
-        console.log(`[SSE API] Client ${clientId} disconnected`);
+        // 性能优化：移除断开连接日志
         SSEManager.unsubscribeClient(clientId);
       },
     });
