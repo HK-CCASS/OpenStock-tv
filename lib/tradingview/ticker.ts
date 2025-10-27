@@ -33,6 +33,7 @@ export class TradingViewTicker {
   private verbose: boolean = false;
   private static readonly BATCH_SIZE = 50; // 每批订阅 50 支股票
   private static readonly BATCH_DELAY = 200; // 批次间延迟 200ms
+  private statusLogTimer: NodeJS.Timeout | null = null; // 状态日志定时器
 
   constructor(symbols: string | string[], verbose: boolean = false) {
     this.symbols = Array.isArray(symbols) ? symbols : [symbols];
@@ -250,6 +251,10 @@ export class TradingViewTicker {
           //   console.log('[TradingView] WebSocket connected');
           // }
           await this.authenticate();
+          
+          // 启动定期状态日志输出（每60秒）
+          this.startStatusLog();
+          
           resolve();
         });
 
@@ -300,6 +305,9 @@ export class TradingViewTicker {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+
+    // 停止状态日志
+    this.stopStatusLog();
     
     if (this.ws) {
       this.ws.close();
@@ -310,6 +318,85 @@ export class TradingViewTicker {
     // if (this.verbose) {
     //   console.log('[TradingView] Stopped');
     // }
+  }
+
+  /**
+   * 开始定期输出订阅状态日志（每60秒）
+   */
+  private startStatusLog(): void {
+    if (this.statusLogTimer) return;
+
+    // 立即输出一次
+    this.logSubscriptionStatus();
+
+    // 每60秒输出一次
+    this.statusLogTimer = setInterval(() => {
+      this.logSubscriptionStatus();
+    }, 60000);
+  }
+
+  /**
+   * 停止状态日志输出
+   */
+  private stopStatusLog(): void {
+    if (this.statusLogTimer) {
+      clearInterval(this.statusLogTimer);
+      this.statusLogTimer = null;
+    }
+  }
+
+  /**
+   * 输出订阅状态日志
+   */
+  private logSubscriptionStatus(): void {
+    const now = Date.now();
+    const totalSymbols = this.symbols.length;
+    
+    // 统计订阅状态
+    const activeSymbols: string[] = []; // 接收过更新的
+    const neverUpdatedSymbols: string[] = []; // 从未更新的
+    const staleSymbols: string[] = []; // 超过10分钟未更新的
+
+    this.symbols.forEach(symbol => {
+      const state = this.states.get(symbol);
+      if (!state) {
+        neverUpdatedSymbols.push(symbol);
+        return;
+      }
+
+      if (!state.lastUpdate || state.lastUpdate === 0) {
+        neverUpdatedSymbols.push(symbol);
+      } else if (now - state.lastUpdate > 10 * 60 * 1000) {
+        staleSymbols.push(symbol);
+      } else {
+        activeSymbols.push(symbol);
+      }
+    });
+
+    // 输出日志
+    console.log('\n========== TradingView 订阅状态 ==========');
+    console.log(`📊 总订阅数: ${totalSymbols}`);
+    console.log(`✅ 活跃订阅: ${activeSymbols.length} (${((activeSymbols.length / totalSymbols) * 100).toFixed(1)}%)`);
+    console.log(`⚠️  过期订阅: ${staleSymbols.length} (>10分钟未更新)`);
+    console.log(`❌ 失败订阅: ${neverUpdatedSymbols.length} (从未接收更新)`);
+    
+    if (neverUpdatedSymbols.length > 0) {
+      console.log(`\n失败的 Symbol (前10个):`);
+      neverUpdatedSymbols.slice(0, 10).forEach(s => console.log(`  - ${s}`));
+      if (neverUpdatedSymbols.length > 10) {
+        console.log(`  ... 还有 ${neverUpdatedSymbols.length - 10} 个`);
+      }
+    }
+
+    if (staleSymbols.length > 0) {
+      console.log(`\n过期的 Symbol (前10个):`);
+      staleSymbols.slice(0, 10).forEach(s => console.log(`  - ${s}`));
+      if (staleSymbols.length > 10) {
+        console.log(`  ... 还有 ${staleSymbols.length - 10} 个`);
+      }
+    }
+
+    console.log('==========================================\n');
   }
 
   /**
