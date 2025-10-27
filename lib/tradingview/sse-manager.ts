@@ -67,11 +67,14 @@ class SSEManager {
     if (!this.isTickerRunning) {
       this.startTicker();
     } else if (this.ticker) {
-      // 如果 Ticker 已运行，添加新的股票代码
+      // 如果 Ticker 已运行，异步添加新的股票代码
       const currentSymbols = this.ticker.getSymbols();
       const newSymbols = symbols.filter(s => !currentSymbols.includes(s));
       if (newSymbols.length > 0) {
-        this.ticker.addSymbols(newSymbols);
+        // 异步调用（不阻塞客户端连接）
+        this.ticker.addSymbols(newSymbols).catch(err => {
+          console.error('[SSE] Failed to add symbols:', err);
+        });
       }
     }
   }

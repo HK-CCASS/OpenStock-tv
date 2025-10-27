@@ -31,6 +31,8 @@ export class TradingViewTicker {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
   private verbose: boolean = false;
+  private static readonly BATCH_SIZE = 50; // 每批订阅 50 支股票
+  private static readonly BATCH_DELAY = 200; // 批次间延迟 200ms
 
   constructor(symbols: string | string[], verbose: boolean = false) {
     this.symbols = Array.isArray(symbols) ? symbols : [symbols];
@@ -80,6 +82,7 @@ export class TradingViewTicker {
 
   /**
    * 发送认证和订阅消息
+   * 支持分批订阅（每批 50 支股票）
    */
   private async authenticate(): Promise<void> {
     this.cs = 'cs_' + this.createRandomToken();
@@ -109,12 +112,43 @@ export class TradingViewTicker {
       'variable_tick_size', 'value_unit_id',
     ]);
 
-    // 订阅股票
-    this.sendMessage('quote_add_symbols', [qsl, ...this.symbols]);
-    this.sendMessage('quote_fast_symbols', [qs, ...this.symbols]);
+    // 分批订阅股票（每批 50 支，避免单次订阅过多）
+    await this.subscribeSymbolsInBatches(this.symbols, qs, qsl);
 
     if (this.verbose) {
-      console.log(`[TradingView] Subscribed to ${this.symbols.length} symbols`);
+      console.log(`[TradingView] Subscribed to ${this.symbols.length} symbols in ${Math.ceil(this.symbols.length / TradingViewTicker.BATCH_SIZE)} batches`);
+    }
+  }
+
+  /**
+   * 分批订阅股票
+   * @param symbols 要订阅的股票列表
+   * @param qs quote session ID
+   * @param qsl quote session list ID
+   */
+  private async subscribeSymbolsInBatches(
+    symbols: string[],
+    qs: string,
+    qsl: string
+  ): Promise<void> {
+    const totalBatches = Math.ceil(symbols.length / TradingViewTicker.BATCH_SIZE);
+
+    for (let i = 0; i < symbols.length; i += TradingViewTicker.BATCH_SIZE) {
+      const batch = symbols.slice(i, i + TradingViewTicker.BATCH_SIZE);
+      const batchIndex = Math.floor(i / TradingViewTicker.BATCH_SIZE) + 1;
+
+      // 发送订阅消息
+      this.sendMessage('quote_add_symbols', [qsl, ...batch]);
+      this.sendMessage('quote_fast_symbols', [qs, ...batch]);
+
+      if (this.verbose) {
+        console.log(`[TradingView] Batch ${batchIndex}/${totalBatches}: Subscribed ${batch.length} symbols`);
+      }
+
+      // 批次间延迟（除了最后一批）
+      if (i + TradingViewTicker.BATCH_SIZE < symbols.length) {
+        await new Promise(resolve => setTimeout(resolve, TradingViewTicker.BATCH_DELAY));
+      }
     }
   }
 
@@ -287,9 +321,9 @@ export class TradingViewTicker {
 
   /**
    * 动态添加新的股票代码
-   * 修复：同时发送 quote_add_symbols 和 quote_fast_symbols
+   * 修复：同时发送 quote_add_symbols 和 quote_fast_symbols，支持分批订阅
    */
-  public addSymbols(newSymbols: string[]): void {
+  public async addSymbols(newSymbols: string[]): Promise<void> {
     const added: string[] = [];
     
     newSymbols.forEach(symbol => {
@@ -310,18 +344,18 @@ export class TradingViewTicker {
     if (added.length > 0) {
       this.symbols.push(...added);
       
-      // 如果 WebSocket 已连接，完整订阅新股票
+      // 如果 WebSocket 已连接，分批订阅新股票
       if (this.ws?.readyState === WebSocket.OPEN) {
         const q = this.createRandomToken();
         const qs = 'qs_' + q;
         const qsl = 'qs_snapshoter_basic-symbol-quotes_' + q;
         
-        // ✅ 修复：添加完整订阅（与初始订阅保持一致）
-        this.sendMessage('quote_add_symbols', [qsl, ...added]);
-        this.sendMessage('quote_fast_symbols', [qs, ...added]);
+        // ✅ 分批订阅新增股票（与初始订阅保持一致）
+        await this.subscribeSymbolsInBatches(added, qs, qsl);
         
         if (this.verbose) {
-          console.log(`[TradingView] Added ${added.length} new symbols`);
+          const batches = Math.ceil(added.length / TradingViewTicker.BATCH_SIZE);
+          console.log(`[TradingView] Added ${added.length} new symbols in ${batches} batch(es)`);
         }
       }
     }

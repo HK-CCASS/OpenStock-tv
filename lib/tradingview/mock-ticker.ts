@@ -240,7 +240,7 @@ export class MockTradingViewTicker {
   /**
    * 动态添加新的股票代码
    */
-  public addSymbols(newSymbols: string[]): void {
+  public async addSymbols(newSymbols: string[]): Promise<void> {
     newSymbols.forEach(symbol => {
       if (!this.states.has(symbol)) {
         const basePrice = this.getBasePrice(symbol);
