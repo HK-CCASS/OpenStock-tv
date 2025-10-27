@@ -6,11 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 核心开发命令
 - `npm run dev` - 启动 Next.js 开发服务器（使用 Turbopack）
+- `npm run dev:mock` - 启动开发服务器（使用模拟 Ticker，无需 TradingView）
 - `npm run build` - 构建生产版本（使用 Turbopack）
 - `npm run start` - 启动生产服务器
 - `npm run lint` - 运行 ESLint 检查
 - `npm run test:db` - 测试数据库连接
-- `npm run migrate:watchlist` - 迁移观察列表数据（使用 tsx）
+
+### 数据迁移命令
+- `npm run migrate:watchlist` - 迁移观察列表数据到多分组结构（使用 tsx）
+- `npm run migrate:multigroup` - 执行多分组数据迁移
+- `npm run test:multigroup` - 测试多分组迁移功能
 
 ### 缓存管理命令
 - `npm run cache:check` - 终端查看缓存状态（MongoDB + Redis）
@@ -20,7 +25,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npx inngest-cli@latest dev` - 启动 Inngest 本地开发服务器（工作流、定时任务、AI 推理）
 
 ### Docker 开发
-- `docker compose up -d mongodb && docker compose up -d --build` - 启动完整 Docker 开发环境
+启动完整开发环境的推荐方式：
+```bash
+# 启动基础服务（MongoDB + Redis）
+docker compose up -d mongodb redis
+
+# 启动应用（使用开发模式构建）
+docker compose up -d --build openstock
+```
+
+或使用简化命令：
+```bash
+docker compose up -d mongodb && docker compose up -d --build
+```
+
+**Docker 服务端口**：
+- 应用：http://localhost:3100
+- MongoDB：localhost:27117（非默认端口）
+- Redis：localhost:6479（非默认端口）
 
 ## 项目架构
 
@@ -156,9 +178,16 @@ scripts/              # 脚本文件
 - Redis 不可用时系统会自动降级到 MongoDB 单层缓存
 
 ### Next.js 配置
-- 图片域名白名单：`i.ibb.co`（TradingView 图片）
-- 构建时忽略 ESLint 和 TypeScript 错误（用于快速开发）
-- 路径别名：`@/*` 映射到项目根目录
+- **图片域名白名单**：`i.ibb.co`（TradingView 图片）
+- **构建优化**：构建时忽略 ESLint 和 TypeScript 错误（用于快速开发）
+- **路径别名**：`@/*` 映射到项目根目录（配置在 `tsconfig.json`）
+- **开发指示器**：已禁用 devIndicators 以获得更清洁的开发体验
+
+### Docker 配置
+- **非默认端口**：MongoDB 使用 27117，Redis 使用 6479，避免与本地服务冲突
+- **健康检查**：所有服务都配置了健康检查，确保依赖服务就绪后才启动应用
+- **网络隔离**：使用 bridge 网络模式，服务间通过服务名通信
+- **数据持久化**：MongoDB 和 Redis 数据卷独立存储
 
 ### 数据库模型
 - **Watchlist**：用户观察列表，每个用户每个股票符号唯一，支持分组关联
@@ -204,12 +233,121 @@ scripts/              # 脚本文件
 - 如修改、重新分发或部署（包括作为 web 服务），必须遵循 AGPL-3.0 许可证
 - 必须以相同许可证发布源代码并署名原作者
 
+## 调试与故障排除
+
+### 常见问题诊断
+1. **数据库连接失败**：
+   - 检查 MongoDB 和 Redis 服务是否运行：`docker ps`
+   - 验证端口占用：`lsof -i :27117` 和 `lsof -i :6479`
+   - 运行连接测试：`npm run test:db`
+
+2. **缓存数据不一致**：
+   - 查看缓存状态：`npm run cache:check`
+   - 生成可视化报告：`npm run cache:visualize`
+   - 手动清理缓存（见下方缓存策略部分）
+
+3. **热力图无数据**：
+   - 检查环境变量 `FINNHUB_API_KEY` 是否配置
+   - 验证 API 配额是否超限
+   - 使用模拟模式测试：`npm run dev:mock`
+
+4. **Inngest 工作流未触发**：
+   - 确认 Inngest 本地开发服务器运行：`npx inngest-cli@latest dev`
+   - 检查函数日志输出
+   - 验证事件是否正确发送
+
+### 日志查看
+```bash
+# 查看应用日志
+docker compose logs -f openstock
+
+# 查看数据库日志
+docker compose logs -f mongodb
+
+# 查看 Redis 日志
+docker compose logs -f redis
+```
+
+### 环境验证脚本
+项目中包含多个验证脚本：
+- `scripts/test-db.mjs` - 数据库连接测试
+- `scripts/test-tradingview-ticker.ts` - TradingView 组件测试
+- `scripts/check-cache-status.ts` - 缓存状态检查
+- `scripts/test-watchlist-multi-group.ts` - 多分组功能测试
+
+## 关键文件位置
+
+### 核心配置文件
+- `package.json` - 项目依赖和脚本定义
+- `next.config.ts` - Next.js 配置（图片域名、构建选项）
+- `tsconfig.json` - TypeScript 配置（路径别名 `@/*`）
+- `docker-compose.yml` - Docker 服务编排（非默认端口）
+- `.env` - 环境变量配置（需从 `.env.example` 复制）
+
+### 数据库模型
+- `database/models/watchlist.model.ts` - 观察列表模型
+- `database/models/watchlist-group.model.ts` - 观察列表分组模型
+- `database/models/market-cap.model.ts` - 市值缓存模型（L2）
+- `database/mongoose.ts` - 数据库连接配置
+
+### Server Actions
+- `lib/actions/auth.actions.ts` - 用户认证逻辑
+- `lib/actions/yahoo-finance.actions.ts` - Yahoo Finance API（主数据源）
+- `lib/actions/finnhub.actions.ts` - Finnhub API（备用数据源）
+- `lib/actions/heatmap.actions.ts` - 热力图数据处理
+- `lib/actions/watchlist.actions.ts` - 观察列表管理
+- `lib/actions/watchlist-group.actions.ts` - 分组管理
+
+### 缓存管理
+- `lib/cache/market-cap-cache-manager.ts` - 双层缓存核心逻辑
+- `lib/redis/client.ts` - Redis 客户端（懒加载 + 降级）
+
+### 页面路由
+- `app/(auth)/sign-in/page.tsx` - 登录页
+- `app/(root)/page.tsx` - 首页（仪表盘）
+- `app/(root)/heatmap/page.tsx` - 热力图页面
+- `app/(root)/watchlists/page.tsx` - 观察列表页面
+- `app/(root)/stocks/[symbol]/page.tsx` - 个股详情页
+
+### 自动化工作流
+- `lib/inngest/client.ts` - Inngest 客户端配置
+- `lib/inngest/functions/` - Inngest 函数定义
+- `app/api/inngest/` - Inngest API 路由
+
 ## 架构文档
 详细的架构文档位于 `docs/` 目录：
 - `docs/ARCHITECTURE.md` - 完整系统架构（含缓存架构图）
+- `docs/ARCHITECTURE_OVERVIEW.md` - 系统概览
 - `docs/architecture/heatmap-architecture.md` - 热力图架构详解
 - `docs/CACHE_VISUALIZATION_GUIDE.md` - 缓存数据可视化指南
 - `docs/MARKET_CAP_CACHE.md` - 市值缓存系统文档
 - `docs/HEATMAP_TESTING_GUIDE.md` - 热力图测试指南
 - `docs/MOCK_TICKER_USAGE.md` - 模拟 Ticker 使用指南
 - `docs/WATCHLIST_USAGE.md` - 观察列表使用指南
+- `docs/WATCHLIST_MULTIGROUP_FEATURE.md` - 多分组功能文档
+- `docs/DOCKER_GUIDE.md` - Docker 部署指南
+- `docs/PORT_CONFIGURATION.md` - 端口配置说明
+
+## 许可证与合规
+
+### AGPL-3.0 许可证要求
+本项目采用 **GNU Affero General Public License v3.0 (AGPL-3.0)** 许可证。
+
+**重要要求**：
+- ✅ 允许查看、修改和私人使用
+- ✅ 允许分发修改版本（需开源）
+- ⚠️ **网络使用**：通过计算机网络提供服务时，必须提供完整源代码
+- ⚠️ **修改再分发**：必须以相同许可证开源，并保留原作者署名
+- ⚠️ **完整文档**：需提供许可证文本和版权声明
+
+**何时必须开源**：
+- 部署为 Web 服务
+- 提供 API 给外部用户
+- 以任何方式通过网络提供服务
+
+**合规检查清单**：
+- [ ] 保留所有 LICENSE 和 COPYRIGHT 声明
+- [ ] 记录所有修改内容
+- [ ] 提供访问完整源代码的方式（如果是网络服务）
+- [ ] 使用相同许可证发布修改版本
+- [ ] 明确标识原创作者和贡献者
