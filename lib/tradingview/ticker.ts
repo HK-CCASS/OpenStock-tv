@@ -32,7 +32,8 @@ export class TradingViewTicker {
   private isRunning: boolean = false;
   private verbose: boolean = false;
   private static readonly BATCH_SIZE = 50; // 每批订阅 50 支股票
-  private static readonly BATCH_DELAY = 200; // 批次间延迟 200ms
+  private static readonly BATCH_DELAY = 300; // 批次间延迟 300ms
+  private static readonly RECONNECT_DELAY = 500; // 重连间隔 500ms
   private statusLogTimer: NodeJS.Timeout | null = null; // 状态日志定时器
 
   constructor(symbols: string | string[], verbose: boolean = false) {
@@ -279,13 +280,13 @@ export class TradingViewTicker {
           if (this.isRunning) {
             // 性能优化：禁用重连日志
             // if (this.verbose) {
-            //   console.log('[TradingView] Reconnecting in 5 seconds...');
+            //   console.log(`[TradingView] Reconnecting in ${TradingViewTicker.RECONNECT_DELAY}ms...`);
             // }
             this.reconnectTimer = setTimeout(() => {
               this.start().catch(err => {
                 console.error('[TradingView] Reconnection failed:', err);
               });
-            }, 5000);
+            }, TradingViewTicker.RECONNECT_DELAY);
           }
         });
       } catch (error) {
