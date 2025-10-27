@@ -22,6 +22,7 @@ class SSEManager {
   private clients: Map<string, SSEClient> = new Map();
   private symbolSubscribers: Map<string, Set<string>> = new Map();
   private isTickerRunning: boolean = false;
+  private healthCheckInterval: NodeJS.Timeout | null = null;
 
   private constructor() {}
 
@@ -140,6 +141,9 @@ class SSEManager {
         }, 1000);
       }
       
+      // 启动订阅健康检查（每5分钟检查一次）
+      this.startHealthCheck();
+      
       // 性能优化：移除启动成功日志
     } catch (error) {
       // 保留错误日志（重要）
@@ -156,6 +160,9 @@ class SSEManager {
     if (!this.isTickerRunning || !this.ticker) return;
 
     // 性能优化：移除停止日志
+    
+    // 停止健康检查
+    this.stopHealthCheck();
     
     this.ticker.stop();
     this.ticker = null;
@@ -195,6 +202,31 @@ class SSEManager {
   }
 
   /**
+   * 启动健康检查（每5分钟检查一次）
+   */
+  private startHealthCheck(): void {
+    // 清理旧的定时器
+    this.stopHealthCheck();
+
+    // 每5分钟检查一次订阅健康状态
+    this.healthCheckInterval = setInterval(() => {
+      if (this.ticker && 'logSubscriptionHealth' in this.ticker) {
+        this.ticker.logSubscriptionHealth();
+      }
+    }, 5 * 60 * 1000); // 5 分钟
+  }
+
+  /**
+   * 停止健康检查
+   */
+  private stopHealthCheck(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+  }
+
+  /**
    * 获取当前状态统计
    */
   public getStats(): {
@@ -206,6 +238,28 @@ class SSEManager {
       clientCount: this.clients.size,
       symbolCount: this.symbolSubscribers.size,
       isTickerRunning: this.isTickerRunning,
+    };
+  }
+
+  /**
+   * 获取订阅健康状态（用于监控）
+   */
+  public getSubscriptionHealth(): {
+    totalSymbols: number;
+    activeSymbols: number;
+    staleSymbols: string[];
+    neverUpdatedSymbols: string[];
+  } | null {
+    if (!this.ticker || !('getSubscriptionStats' in this.ticker)) {
+      return null;
+    }
+
+    const stats = this.ticker.getSubscriptionStats();
+    return {
+      totalSymbols: stats.totalSymbols,
+      activeSymbols: stats.activeSymbols,
+      staleSymbols: stats.staleSymbols,
+      neverUpdatedSymbols: stats.neverUpdatedSymbols,
     };
   }
 

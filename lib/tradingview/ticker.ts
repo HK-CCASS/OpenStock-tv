@@ -11,6 +11,8 @@ export interface TickerState {
   change: number;
   changePercent: number;
   time: number;
+  lastUpdate?: number; // 最后一次接收数据的时间戳（用于监控）
+  updateCount?: number; // 接收更新次数（用于验证订阅）
 }
 
 export type TickerCallback = (symbol: string, state: TickerState) => void;
@@ -34,7 +36,7 @@ export class TradingViewTicker {
     this.symbols = Array.isArray(symbols) ? symbols : [symbols];
     this.verbose = verbose;
     
-    // 初始化所有股票的状态
+    // 初始化所有股票的状态（包含监控字段）
     this.symbols.forEach(symbol => {
       this.states.set(symbol, {
         volume: 0,
@@ -42,6 +44,8 @@ export class TradingViewTicker {
         change: 0,
         changePercent: 0,
         time: 0,
+        lastUpdate: 0,
+        updateCount: 0,
       });
     });
   }
@@ -152,6 +156,7 @@ export class TradingViewTicker {
 
   /**
    * 处理股票报价数据
+   * 添加监控：记录最后更新时间和更新次数
    */
   private handleTickerData(data: TradingViewMessage): void {
     try {
@@ -169,6 +174,10 @@ export class TradingViewTicker {
       if (values.chp !== undefined) state.changePercent = values.chp;
       if (values.ch !== undefined) state.change = values.ch;
       if (values.lp_time !== undefined) state.time = values.lp_time;
+
+      // 监控字段
+      state.lastUpdate = Date.now();
+      state.updateCount = (state.updateCount || 0) + 1;
 
       // 触发回调
       if (this.callback) {
@@ -278,6 +287,7 @@ export class TradingViewTicker {
 
   /**
    * 动态添加新的股票代码
+   * 修复：同时发送 quote_add_symbols 和 quote_fast_symbols
    */
   public addSymbols(newSymbols: string[]): void {
     const added: string[] = [];
@@ -290,6 +300,8 @@ export class TradingViewTicker {
           change: 0,
           changePercent: 0,
           time: 0,
+          lastUpdate: 0,
+          updateCount: 0,
         });
         added.push(symbol);
       }
@@ -298,11 +310,15 @@ export class TradingViewTicker {
     if (added.length > 0) {
       this.symbols.push(...added);
       
-      // 如果 WebSocket 已连接，重新订阅
+      // 如果 WebSocket 已连接，完整订阅新股票
       if (this.ws?.readyState === WebSocket.OPEN) {
         const q = this.createRandomToken();
         const qs = 'qs_' + q;
-        this.sendMessage('quote_fast_symbols', [qs, ...this.symbols]);
+        const qsl = 'qs_snapshoter_basic-symbol-quotes_' + q;
+        
+        // ✅ 修复：添加完整订阅（与初始订阅保持一致）
+        this.sendMessage('quote_add_symbols', [qsl, ...added]);
+        this.sendMessage('quote_fast_symbols', [qs, ...added]);
         
         if (this.verbose) {
           console.log(`[TradingView] Added ${added.length} new symbols`);
@@ -316,6 +332,75 @@ export class TradingViewTicker {
    */
   public getSymbols(): string[] {
     return [...this.symbols];
+  }
+
+  /**
+   * 获取订阅状态统计（用于监控和调试）
+   * 返回：订阅总数、接收更新的股票数、未接收更新的股票列表
+   */
+  public getSubscriptionStats(): {
+    totalSymbols: number;
+    activeSymbols: number; // 接收过更新的股票数
+    staleSymbols: string[]; // 超过5分钟未更新的股票
+    neverUpdatedSymbols: string[]; // 从未接收过更新的股票
+    lastUpdateTimes: Map<string, number>; // 每个股票的最后更新时间
+  } {
+    const now = Date.now();
+    const staleThreshold = 5 * 60 * 1000; // 5 分钟
+    
+    let activeCount = 0;
+    const staleSymbols: string[] = [];
+    const neverUpdatedSymbols: string[] = [];
+    const lastUpdateTimes = new Map<string, number>();
+
+    this.states.forEach((state, symbol) => {
+      const lastUpdate = state.lastUpdate || 0;
+      lastUpdateTimes.set(symbol, lastUpdate);
+
+      if (lastUpdate === 0) {
+        neverUpdatedSymbols.push(symbol);
+      } else {
+        activeCount++;
+        const timeSinceUpdate = now - lastUpdate;
+        if (timeSinceUpdate > staleThreshold) {
+          staleSymbols.push(symbol);
+        }
+      }
+    });
+
+    return {
+      totalSymbols: this.symbols.length,
+      activeSymbols: activeCount,
+      staleSymbols,
+      neverUpdatedSymbols,
+      lastUpdateTimes,
+    };
+  }
+
+  /**
+   * 生产环境监控日志（可选）
+   * 只在检测到问题时输出，避免性能影响
+   */
+  public logSubscriptionHealth(): void {
+    const stats = this.getSubscriptionStats();
+    
+    // 只在有问题时输出
+    if (stats.neverUpdatedSymbols.length > 0 || stats.staleSymbols.length > 0) {
+      console.warn('[TradingView] Subscription Health Check:', {
+        total: stats.totalSymbols,
+        active: stats.activeSymbols,
+        neverUpdated: stats.neverUpdatedSymbols.length,
+        stale: stats.staleSymbols.length,
+      });
+
+      if (stats.neverUpdatedSymbols.length > 0) {
+        console.warn('[TradingView] Never updated symbols:', stats.neverUpdatedSymbols.slice(0, 10));
+      }
+
+      if (stats.staleSymbols.length > 0) {
+        console.warn('[TradingView] Stale symbols (>5min):', stats.staleSymbols.slice(0, 10));
+      }
+    }
   }
 }
 
