@@ -121,11 +121,11 @@ class SSEManager {
     // 性能优化：移除启动日志
 
     try {
-      // 根据配置选择 Ticker 类型
+      // 根据配置选择 Ticker 类型（禁用 verbose 模式，避免高频日志）
       if (USE_MOCK_TICKER) {
-        this.ticker = new MockTradingViewTicker(allSymbols, true) as any;
+        this.ticker = new MockTradingViewTicker(allSymbols, false) as any;
       } else {
-        this.ticker = new TradingViewTicker(allSymbols, true);
+        this.ticker = new TradingViewTicker(allSymbols, false);
       }
       
       // 设置更新回调

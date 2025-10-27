@@ -115,9 +115,10 @@ export class TradingViewTicker {
     // 分批订阅股票（每批 50 支，避免单次订阅过多）
     await this.subscribeSymbolsInBatches(this.symbols, qs, qsl);
 
-    if (this.verbose) {
-      console.log(`[TradingView] Subscribed to ${this.symbols.length} symbols in ${Math.ceil(this.symbols.length / TradingViewTicker.BATCH_SIZE)} batches`);
-    }
+    // 性能优化：禁用订阅完成日志
+    // if (this.verbose) {
+    //   console.log(`[TradingView] Subscribed to ${this.symbols.length} symbols in ${Math.ceil(this.symbols.length / TradingViewTicker.BATCH_SIZE)} batches`);
+    // }
   }
 
   /**
@@ -141,9 +142,10 @@ export class TradingViewTicker {
       this.sendMessage('quote_add_symbols', [qsl, ...batch]);
       this.sendMessage('quote_fast_symbols', [qs, ...batch]);
 
-      if (this.verbose) {
-        console.log(`[TradingView] Batch ${batchIndex}/${totalBatches}: Subscribed ${batch.length} symbols`);
-      }
+      // 性能优化：禁用批次日志
+      // if (this.verbose) {
+      //   console.log(`[TradingView] Batch ${batchIndex}/${totalBatches}: Subscribed ${batch.length} symbols`);
+      // }
 
       // 批次间延迟（除了最后一批）
       if (i + TradingViewTicker.BATCH_SIZE < symbols.length) {
@@ -218,9 +220,10 @@ export class TradingViewTicker {
         this.callback(symbol, { ...state });
       }
 
-      if (this.verbose) {
-        console.log(`[TradingView] ${symbol}: $${state.price.toFixed(2)} (${state.changePercent >= 0 ? '+' : ''}${state.changePercent.toFixed(2)}%)`);
-      }
+      // 性能优化：禁用股价更新日志（超高频！每秒可能几十上百条）
+      // if (this.verbose) {
+      //   console.log(`[TradingView] ${symbol}: $${state.price.toFixed(2)} (${state.changePercent >= 0 ? '+' : ''}${state.changePercent.toFixed(2)}%)`);
+      // }
     } catch (error) {
       console.error('[TradingView] Error handling ticker data:', error);
     }
@@ -242,9 +245,10 @@ export class TradingViewTicker {
         });
 
         this.ws.on('open', async () => {
-          if (this.verbose) {
-            console.log('[TradingView] WebSocket connected');
-          }
+          // 性能优化：禁用连接成功日志
+          // if (this.verbose) {
+          //   console.log('[TradingView] WebSocket connected');
+          // }
           await this.authenticate();
           resolve();
         });
@@ -261,15 +265,17 @@ export class TradingViewTicker {
         });
 
         this.ws.on('close', () => {
-          if (this.verbose) {
-            console.log('[TradingView] WebSocket closed');
-          }
+          // 性能优化：禁用关闭日志
+          // if (this.verbose) {
+          //   console.log('[TradingView] WebSocket closed');
+          // }
           
           // 自动重连
           if (this.isRunning) {
-            if (this.verbose) {
-              console.log('[TradingView] Reconnecting in 5 seconds...');
-            }
+            // 性能优化：禁用重连日志
+            // if (this.verbose) {
+            //   console.log('[TradingView] Reconnecting in 5 seconds...');
+            // }
             this.reconnectTimer = setTimeout(() => {
               this.start().catch(err => {
                 console.error('[TradingView] Reconnection failed:', err);
@@ -300,9 +306,10 @@ export class TradingViewTicker {
       this.ws = null;
     }
 
-    if (this.verbose) {
-      console.log('[TradingView] Stopped');
-    }
+    // 性能优化：禁用停止日志
+    // if (this.verbose) {
+    //   console.log('[TradingView] Stopped');
+    // }
   }
 
   /**
@@ -353,10 +360,11 @@ export class TradingViewTicker {
         // ✅ 分批订阅新增股票（与初始订阅保持一致）
         await this.subscribeSymbolsInBatches(added, qs, qsl);
         
-        if (this.verbose) {
-          const batches = Math.ceil(added.length / TradingViewTicker.BATCH_SIZE);
-          console.log(`[TradingView] Added ${added.length} new symbols in ${batches} batch(es)`);
-        }
+        // 性能优化：禁用动态添加日志
+        // if (this.verbose) {
+        //   const batches = Math.ceil(added.length / TradingViewTicker.BATCH_SIZE);
+        //   console.log(`[TradingView] Added ${added.length} new symbols in ${batches} batch(es)`);
+        // }
       }
     }
   }

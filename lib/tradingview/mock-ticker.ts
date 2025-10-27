@@ -150,9 +150,10 @@ export class MockTradingViewTicker {
 
     this.isRunning = true;
 
-    if (this.verbose) {
-      console.log('[Mock Ticker] Starting with', this.symbols.length, 'symbols');
-    }
+    // 性能优化：禁用启动日志
+    // if (this.verbose) {
+    //   console.log('[Mock Ticker] Starting with', this.symbols.length, 'symbols');
+    // }
 
     // 模拟连接延迟
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -162,9 +163,10 @@ export class MockTradingViewTicker {
       this.generateRandomUpdate();
     }, 1000 + Math.random() * 2000);
 
-    if (this.verbose) {
-      console.log('[Mock Ticker] Started successfully');
-    }
+    // 性能优化：禁用启动成功日志
+    // if (this.verbose) {
+    //   console.log('[Mock Ticker] Started successfully');
+    // }
   }
 
   /**
@@ -199,12 +201,13 @@ export class MockTradingViewTicker {
       this.callback(symbol, { ...state });
     }
 
-    if (this.verbose) {
-      const sign = state.changePercent >= 0 ? '+' : '';
-      console.log(
-        `[Mock Ticker] ${symbol}: $${state.price.toFixed(2)} (${sign}${state.changePercent.toFixed(2)}%)`
-      );
-    }
+    // 性能优化：禁用股价更新日志（超高频！每1-3秒触发）
+    // if (this.verbose) {
+    //   const sign = state.changePercent >= 0 ? '+' : '';
+    //   console.log(
+    //     `[Mock Ticker] ${symbol}: $${state.price.toFixed(2)} (${sign}${state.changePercent.toFixed(2)}%)`
+    //   );
+    // }
   }
 
   /**
@@ -218,9 +221,10 @@ export class MockTradingViewTicker {
       this.updateInterval = null;
     }
 
-    if (this.verbose) {
-      console.log('[Mock Ticker] Stopped');
-    }
+    // 性能优化：禁用停止日志
+    // if (this.verbose) {
+    //   console.log('[Mock Ticker] Stopped');
+    // }
   }
 
   /**
@@ -255,9 +259,10 @@ export class MockTradingViewTicker {
       }
     });
 
-    if (this.verbose) {
-      console.log(`[Mock Ticker] Added ${newSymbols.length} new symbols`);
-    }
+    // 性能优化：禁用动态添加日志
+    // if (this.verbose) {
+    //   console.log(`[Mock Ticker] Added ${newSymbols.length} new symbols`);
+    // }
   }
 
   /**
@@ -278,9 +283,10 @@ export class MockTradingViewTicker {
       }
     });
 
-    if (this.verbose) {
-      console.log(`[Mock Ticker] Generated initial updates for ${this.symbols.length} symbols`);
-    }
+    // 性能优化：禁用初始更新日志
+    // if (this.verbose) {
+    //   console.log(`[Mock Ticker] Generated initial updates for ${this.symbols.length} symbols`);
+    // }
   }
 }
 
