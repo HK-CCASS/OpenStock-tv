@@ -50,7 +50,7 @@ const AdminLayout = async ({ children }: { children: React.ReactNode }) => {
       <Header user={user} />
 
       {/* Admin Content Container */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto py-8">
         {children}
       </div>
     </div>

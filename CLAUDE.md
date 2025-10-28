@@ -2,14 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 代码风格与质量
+
+### ESLint 配置
+- 基于 Next.js 和 TypeScript 官方推荐配置 (`eslint.config.mjs`)
+- 扩展: `next/core-web-vitals`, `next/typescript`
+- 忽略: `node_modules/`, `.next/`, `build/`, `next-env.d.ts`
+- 运行检查: `npm run lint`
+
 ## 开发命令
 
 ### 核心开发命令
 - `npm run dev` - 启动 Next.js 开发服务器（使用 Turbopack）
-- `npm run dev:mock` - 启动开发服务器（使用模拟 Ticker，无需 TradingView）
+- `npm run dev:mock` - 启动开发服务器（使用模拟 Ticker，85+ 预设股票）
 - `npm run build` - 构建生产版本（使用 Turbopack）
 - `npm run start` - 启动生产服务器
-- `npm run lint` - 运行 ESLint 检查
+- `npm run lint` - 运行 ESLint 检查（基于 Next.js + TypeScript 配置）
 - `npm run test:db` - 测试数据库连接
 
 ### 数据迁移命令
@@ -116,7 +124,22 @@ scripts/              # 脚本文件
 └── visualize-cache.ts         # 生成缓存可视化报告
 ```
 
-### 关键架构模式
+### 测试策略
+当前项目采用以下测试方法：
+- **数据库连接测试**: `npm run test:db`
+- **模拟 Ticker 测试**: `npm run dev:mock`（非交易时间测试，85+ 预设股票）
+- **订阅健康检查**: `npm run subscription:health`
+- **缓存状态验证**: `npm run cache:check` / `npm run cache:visualize`
+- **多分组功能测试**: `npm run test:multigroup`
+
+**注意**: 项目暂无单元测试框架配置，采用端到端和集成测试方式。
+
+## 关键架构模式
+
+### 核心设计原则
+1. **最小改动** - 仅修改必须的行数，禁止无关重构或格式化
+2. **透明回报** - 诚实暴露错误，严禁使用 mock/stub 让测试假通过
+3. **先计划后执行** - 所有改动前必须输出修改计划（文件路径、行号范围、修改原因）
 
 #### 认证系统
 - 使用 Better Auth + MongoDB 适配器
@@ -220,6 +243,12 @@ scripts/              # 脚本文件
 
 ## 开发注意事项
 
+### 开发模式说明
+- **默认端口**: 开发服务器运行在 `http://localhost:3000`（直接运行）或 `http://localhost:3100`（Docker）
+- **图片域名**: 已配置 `i.ibb.co` 白名单（TradingView 图片）
+- **路径别名**: 配置 `@/*` 映射到项目根目录（方便导入）
+- **构建优化**: 构建时忽略 ESLint 和 TypeScript 错误（快速开发模式）
+
 ### API 使用限制
 - **Yahoo Finance**：无需 API Key，免费使用，批量最多 100 支
 - **Finnhub**：免费层可能有延迟报价，需遵守速率限制，批量最多 50 支
@@ -299,9 +328,10 @@ docker compose logs -f redis
 
 ### 核心配置文件
 - `package.json` - 项目依赖和脚本定义
-- `next.config.ts` - Next.js 配置（图片域名、构建选项）
+- `next.config.ts` - Next.js 配置（图片域名白名单 `i.ibb.co`、构建优化）
 - `tsconfig.json` - TypeScript 配置（路径别名 `@/*`）
-- `docker-compose.yml` - Docker 服务编排（非默认端口）
+- `eslint.config.mjs` - ESLint 配置（Next.js + TypeScript 官方规则）
+- `docker-compose.yml` - Docker 服务编排（MongoDB: 27117, Redis: 6479, App: 3100）
 - `.env` - 环境变量配置（需从 `.env.example` 复制）
 
 ### 数据库模型
@@ -347,8 +377,9 @@ docker compose logs -f redis
 - `lib/inngest/functions/` - Inngest 函数定义
 - `app/api/inngest/` - Inngest API 路由
 
-## 架构文档
-详细的架构文档位于 `docs/` 目录：
+## 架构文档与执行报告
+
+### 核心架构文档 (`docs/` 目录)
 - `docs/ARCHITECTURE.md` - 完整系统架构（含缓存架构图）
 - `docs/ARCHITECTURE_OVERVIEW.md` - 系统概览
 - `docs/architecture/heatmap-architecture.md` - 热力图架构详解
@@ -360,6 +391,12 @@ docker compose logs -f redis
 - `docs/WATCHLIST_MULTIGROUP_FEATURE.md` - 多分组功能文档
 - `docs/DOCKER_GUIDE.md` - Docker 部署指南
 - `docs/PORT_CONFIGURATION.md` - 端口配置说明
+
+### 执行报告 (`docs/execution-reports/` 目录)
+- **命名规则**: `<时间戳>_<中文任务摘要>.md`
+- **时间戳格式**: `YYYY-MM-DD_HH-MM-SS`
+- **内容**: 自动生成的任务执行报告，记录修改的文件、行号范围和修改原因
+- **用途**: 追踪开发进度，记录重要变更，便于代码审查和问题追溯
 
 ## 许可证与合规
 
@@ -384,3 +421,39 @@ docker compose logs -f redis
 - [ ] 提供访问完整源代码的方式（如果是网络服务）
 - [ ] 使用相同许可证发布修改版本
 - [ ] 明确标识原创作者和贡献者
+
+---
+
+## 快速参考
+
+### 🏃‍♂️ 常用开发流程
+```bash
+# 1. 启动开发环境（带模拟数据）
+npm run dev:mock
+
+# 2. 检查服务状态
+npm run test:db
+npm run cache:check
+
+# 3. 运行代码检查
+npm run lint
+
+# 4. 构建生产版本
+npm run build && npm run start
+```
+
+### 🔧 故障快速诊断
+| 问题 | 快速检查命令 |
+|------|-------------|
+| 数据库连接失败 | `npm run test:db` |
+| 缓存异常 | `npm run cache:visualize` |
+| 订阅问题 | `npm run subscription:health` |
+| Docker 服务 | `docker ps` |
+| 查看日志 | `docker compose logs -f openstock` |
+
+### 📍 关键路径速查
+- 热力图页面: `app/(root)/heatmap/page.tsx`
+- 缓存管理: `lib/cache/market-cap-cache-manager.ts`
+- Server Actions: `lib/actions/`
+- 数据库模型: `database/models/`
+- API 路由: `app/api/`

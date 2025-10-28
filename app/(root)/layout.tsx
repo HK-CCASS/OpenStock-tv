@@ -53,7 +53,7 @@ const Layout = async ({ children }: { children : React.ReactNode }) => {
             <Header user={user} />
 
             {/* Main content container with responsive padding */}
-            <div className="container py-10">
+            <div className="container pt-4 pb-8">
                 {children}
             </div>
 

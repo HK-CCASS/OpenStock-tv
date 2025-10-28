@@ -15,7 +15,7 @@ export default async function WatchlistsPage() {
   const watchlistGroups = await getWatchlistGroupsByUser(userId);
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">自选列表管理</h1>
         <p className="text-muted-foreground">
@@ -23,7 +23,7 @@ export default async function WatchlistsPage() {
         </p>
       </div>
 
-      <WatchlistGroupManager 
+      <WatchlistGroupManager
         initialGroups={watchlistGroups}
         userId={userId}
       />

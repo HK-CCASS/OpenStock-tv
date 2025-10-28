@@ -19,7 +19,7 @@ export default async function MultiStockPage() {
 
   if (watchlistGroups.length === 0) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="py-8">
         <div className="text-center py-12">
           <h1 className="text-3xl font-bold mb-4">多股同列</h1>
           <p className="text-gray-400 mb-6">您还没有创建任何自选列表</p>
@@ -37,7 +37,7 @@ export default async function MultiStockPage() {
 
   if (!groupDetail) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="py-8">
         <div className="text-center py-12">
           <h1 className="text-3xl font-bold mb-4">多股同列</h1>
           <p className="text-gray-400">无法加载自选列表数据</p>
@@ -51,7 +51,7 @@ export default async function MultiStockPage() {
   const symbolsForModule = adaptSymbolsForModule(groupDetail.symbols);
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">多股同列</h1>
         <p className="text-muted-foreground">
