@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RefreshCw, Trash2, Download, AlertTriangle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RefreshCw, Trash2, Download, AlertTriangle, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 /**
@@ -16,14 +17,116 @@ import { useState } from 'react';
 
 export default function OperationsTab() {
   const [refreshSymbols, setRefreshSymbols] = useState('');
+  const [selectedSource, setSelectedSource] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleRefresh = async () => {
+    if (!refreshSymbols) {
+      alert('请输入股票代码');
+      return;
+    }
+
     setIsRefreshing(true);
-    // TODO: Implement refresh logic
-    setTimeout(() => {
+    try {
+      const symbols = refreshSymbols.split(',').map(s => s.trim()).filter(Boolean);
+
+      const response = await fetch('/api/admin/cache/operations/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'refresh',
+          symbols,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to refresh cache');
+      }
+
+      alert('缓存刷新任务已启动，请稍后查看结果');
+      setRefreshSymbols('');
+    } catch (error) {
+      console.error('Refresh error:', error);
+      alert('刷新失败: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
       setIsRefreshing(false);
-    }, 2000);
+    }
+  };
+
+  const handleClearCache = async (type: string, params?: any) => {
+    if (!confirm(`确定要执行"${type}"操作吗？此操作不可撤销！`)) {
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      const response = await fetch('/api/admin/cache/operations/clear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params || {}),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to clear cache');
+      }
+
+      alert(`缓存清理成功！已清理 ${result.data?.totalCleared || 0} 条记录`);
+    } catch (error) {
+      console.error('Clear cache error:', error);
+      alert('清理失败: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
+  const handleExport = async (type: string) => {
+    setIsExporting(true);
+    try {
+      let format = 'csv';
+      let url = `/api/admin/cache/export?type=${type}&format=${format}`;
+
+      if (type === 'expired') {
+        format = 'json';
+        url = `/api/admin/cache/export?type=${type}&format=${format}`;
+      } else if (type === 'bySource') {
+        format = 'excel';
+        const source = prompt('请输入数据源 (yahoo/finnhub/fallback):');
+        if (!source) {
+          setIsExporting(false);
+          return;
+        }
+        url = `/api/admin/cache/export?type=${type}&format=${format}&source=${source}`;
+      }
+
+      // Create download link
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `${type}_cache_data.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+
+      alert('导出成功！');
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('导出失败: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -62,7 +165,11 @@ export default function OperationsTab() {
                 disabled={!refreshSymbols || isRefreshing}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
                 {isRefreshing ? '刷新中...' : '刷新指定股票'}
               </Button>
 
@@ -70,6 +177,7 @@ export default function OperationsTab() {
                 variant="outline"
                 className="border-[#2a2a2a] text-gray-400"
                 disabled={isRefreshing}
+                onClick={() => handleClearCache('清理过期记录', { mongodb: true, expired: true })}
               >
                 刷新过期记录
               </Button>
@@ -78,6 +186,7 @@ export default function OperationsTab() {
                 variant="outline"
                 className="border-[#2a2a2a] text-gray-400"
                 disabled={isRefreshing}
+                onClick={() => handleClearCache('按源清理 (Yahoo)', { mongodb: true, bySource: 'yahoo' })}
               >
                 按源刷新 (Yahoo)
               </Button>
@@ -86,6 +195,7 @@ export default function OperationsTab() {
                 variant="outline"
                 className="border-[#2a2a2a] text-gray-400"
                 disabled={isRefreshing}
+                onClick={() => handleClearCache('按源清理 (Finnhub)', { mongodb: true, bySource: 'finnhub' })}
               >
                 按源刷新 (Finnhub)
               </Button>
@@ -93,7 +203,8 @@ export default function OperationsTab() {
               <Button
                 variant="destructive"
                 className="bg-red-600 hover:bg-red-700"
-                disabled={isRefreshing}
+                disabled={isRefreshing || isClearing}
+                onClick={() => handleClearCache('清理所有缓存', { mongodb: true, redis: true })}
               >
                 刷新所有缓存
               </Button>
@@ -128,40 +239,76 @@ export default function OperationsTab() {
             <Button
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
+              disabled={isClearing}
+              onClick={() => handleClearCache('清空 Redis 缓存', { redis: true })}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              {isClearing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
               清空 Redis 缓存
             </Button>
 
             <Button
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
+              disabled={isClearing}
+              onClick={() => handleClearCache('清空 MongoDB 缓存', { mongodb: true })}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              {isClearing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
               清空 MongoDB 缓存
             </Button>
 
             <Button
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
+              disabled={isClearing}
+              onClick={() => handleClearCache('清空过期记录', { mongodb: true, expired: true })}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              {isClearing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
               清空过期记录
             </Button>
 
             <Button
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
+              disabled={isClearing}
+              onClick={() => {
+                const symbols = prompt('请输入要清空的股票代码（逗号分隔）');
+                if (symbols) {
+                  const symbolList = symbols.split(',').map(s => s.trim()).filter(Boolean);
+                  handleClearCache('清空指定股票', { mongodb: true, symbols: symbolList });
+                }
+              }}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              {isClearing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
               清空指定股票
             </Button>
 
             <Button
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
+              disabled={isClearing}
+              onClick={() => handleClearCache('清空所有缓存', { mongodb: true, redis: true })}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              {isClearing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
               清空所有缓存
             </Button>
           </div>
@@ -184,34 +331,46 @@ export default function OperationsTab() {
             <Button
               variant="outline"
               className="border-[#2a2a2a] text-gray-400 h-20"
+              disabled={isExporting}
+              onClick={() => handleExport('all')}
             >
-              <div className="text-center">
+              {isExporting ? (
+                <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin" />
+              ) : (
                 <Download className="h-6 w-6 mx-auto mb-2" />
-                <div>导出全部</div>
-                <div className="text-xs text-gray-500">CSV 格式</div>
-              </div>
+              )}
+              <div>导出全部</div>
+              <div className="text-xs text-gray-500">CSV 格式</div>
             </Button>
 
             <Button
               variant="outline"
               className="border-[#2a2a2a] text-gray-400 h-20"
+              disabled={isExporting}
+              onClick={() => handleExport('expired')}
             >
-              <div className="text-center">
+              {isExporting ? (
+                <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin" />
+              ) : (
                 <Download className="h-6 w-6 mx-auto mb-2" />
-                <div>导出过期</div>
-                <div className="text-xs text-gray-500">JSON 格式</div>
-              </div>
+              )}
+              <div>导出过期</div>
+              <div className="text-xs text-gray-500">JSON 格式</div>
             </Button>
 
             <Button
               variant="outline"
               className="border-[#2a2a2a] text-gray-400 h-20"
+              disabled={isExporting}
+              onClick={() => handleExport('bySource')}
             >
-              <div className="text-center">
+              {isExporting ? (
+                <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin" />
+              ) : (
                 <Download className="h-6 w-6 mx-auto mb-2" />
-                <div>导出指定源</div>
-                <div className="text-xs text-gray-500">Excel 格式</div>
-              </div>
+              )}
+              <div>导出指定源</div>
+              <div className="text-xs text-gray-500">Excel 格式</div>
             </Button>
           </div>
         </CardContent>

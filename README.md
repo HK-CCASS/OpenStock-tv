@@ -114,6 +114,16 @@ Language composition
     - Company profile and financials widgets
 - Market overview
     - Heatmap, quotes, and top stories (TradingView widgets)
+- **Cache Management System** 🆕
+    - Admin dashboard for monitoring dual-layer cache system (Redis L1 + MongoDB L2)
+    - Real-time cache statistics and performance metrics
+    - Data source health monitoring (Yahoo Finance, Finnhub, Fallback)
+    - Cache data management with filtering, search, and bulk operations
+    - Audit log tracking for all cache operations
+    - **Real-time monitoring** via Server-Sent Events (SSE)
+    - **Performance analytics**: Hit rates, response times, memory usage
+    - **Cache operations**: View, search, filter, export, and bulk delete cached data
+    - **User-friendly access**: Simple `/cache` URL with authentication protection
 - **Real-time Heatmap** 🆕
     - Interactive treemap visualization based on user's watchlists
     - Group stocks by category with automatic pool aggregation
@@ -225,6 +235,8 @@ npm run build && npm start
 ```
 
 Open http://localhost:3000 to view the app (local development).
+
+**Cache Management**: Access the admin cache dashboard at http://localhost:3000/cache (requires authentication)
 
 **Note**: For Docker deployment, the app runs on **http://localhost:3100** (non-default port).
 
@@ -416,14 +428,19 @@ app/
 components/
   ui/…          # shadcn/radix primitives (button, dialog, command, input, etc.)
   forms/…       # InputField, SelectField, CountrySelectField, FooterLink
+  admin/…       # Cache management components (charts, visualizers, etc.)
   Header.tsx, Footer.tsx, SearchCommand.tsx, WatchlistButton.tsx, …
 database/
   models/watchlist.model.ts
+  watchlist-group.model.ts
+  market-cap.model.ts  # L2 cache persistence for market cap data
+  audit-log.model.ts     # Cache admin audit log tracking
   mongoose.ts
 lib/
-  actions/…     # server actions (auth, finnhub, yahoo-finance, heatmap, user, watchlist, watchlist-group)
+  actions/…     # server actions (auth, finnhub, yahoo-finance, heatmap, user, watchlist, watchlist-group, admin/cache-admin.actions)
   cache/…       # market-cap-cache-manager (dual-layer Redis L1 + MongoDB L2)
   redis/…       # Redis client (lazy-loaded, auto-fallback)
+  utils/permissions.ts  # Admin access control and security
   tradingview/… # ticker, mock-ticker, sse-manager
   better-auth/…
   inngest/…     # client, functions, prompts

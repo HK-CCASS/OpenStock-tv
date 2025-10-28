@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCacheOverview } from '@/lib/actions/admin/cache-admin.actions';
+import { withAdminSecurity, OPERATION_TYPES } from '@/lib/utils/api-permissions';
 
 /**
  * GET /api/admin/cache/overview
  * Get cache system overview statistics
  */
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   try {
     const overview = await getCacheOverview();
 
@@ -24,3 +25,6 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// Apply admin security (permission check + rate limiting)
+export const GET = withAdminSecurity(handleGet, { operationType: OPERATION_TYPES.GET_OVERVIEW });

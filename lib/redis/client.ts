@@ -14,7 +14,7 @@ export function getRedisClient(): Redis | null {
   }
 
   // 如果已初始化且可用，直接返回
-  if (redisClient && redisAvailable === true) {
+  if (redisClient && redisAvailable === true && redisClient.status === 'ready') {
     return redisClient;
   }
 
@@ -45,17 +45,19 @@ export function getRedisClient(): Redis | null {
       });
 
       // 监听连接事件
-      redisClient.on('connect', () => {
-        console.log('[Redis] ✅ Connected successfully');
+      redisClient.on('ready', () => {
         redisAvailable = true;
       });
 
       redisClient.on('error', (err) => {
-        console.error('[Redis] ⚠️ Connection error:', err.message);
         redisAvailable = false;
       });
 
-      redisAvailable = true;  // 假设连接成功
+      redisClient.on('close', () => {
+        redisAvailable = false;
+      });
+
+      // 不立即设置可用状态，等待连接事件
       return redisClient;
     } catch (error) {
       console.error('[Redis] Initialization failed:', error);
@@ -71,7 +73,7 @@ export function getRedisClient(): Redis | null {
  * 检查 Redis 是否可用
  */
 export function isRedisAvailable(): boolean {
-  return redisAvailable && redisClient !== null;
+  return redisAvailable === true && redisClient !== null && redisClient.status === 'ready';
 }
 
 /**

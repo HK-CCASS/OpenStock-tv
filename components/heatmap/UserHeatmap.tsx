@@ -631,9 +631,9 @@ export default function UserHeatmap({ userId }: { userId: string }) {
           },
           upperLabel: {
             show: false,  // 暂时隐藏 upperLabel，给股票方块更多空间
-            height: 16,   // 进一步减小高度
+            height: 22,   // 进一步减小高度
             color: '#ffffff',
-            fontSize: 10,
+            fontSize: 14,
             fontWeight: 'bold',
             backgroundColor: 'rgba(0, 0, 0, 0.7)',
             borderColor: 'rgba(255, 255, 255, 0.2)',

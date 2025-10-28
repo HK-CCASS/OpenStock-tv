@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Database, Activity, TrendingUp, Server, Loader2 } from 'lucide-react';
+import { Database, Activity, TrendingUp, Server, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { DataSourceFallbackVisualizer } from '@/components/admin/data-source-fallback-visualizer';
+import { PerformanceCharts } from '@/components/admin/performance-charts';
+import { useCacheStream } from '@/hooks/use-cache-stream';
 
 interface CacheOverview {
   redis: {
@@ -38,13 +41,23 @@ interface CacheOverview {
  */
 
 export default function DashboardTab() {
-  const [data, setData] = useState<CacheOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [data, setData] = useState<CacheOverview | null>(null);
+
+  // Use SSE for real-time updates
+  const { data: streamData, connected, error: streamError } = useCacheStream(true);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (streamData?.overview) {
+      setData(streamData.overview);
+      setLastUpdate(new Date());
+      if (loading) {
+        setLoading(false);
+      }
+    }
+  }, [streamData?.overview, loading]);
 
   const fetchData = async () => {
     try {
@@ -54,6 +67,7 @@ export default function DashboardTab() {
 
       if (result.success) {
         setData(result.data);
+        setLastUpdate(new Date());
       } else {
         setError(result.error || 'Failed to fetch data');
       }
@@ -63,6 +77,12 @@ export default function DashboardTab() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (streamError) {
+      setError(streamError);
+    }
+  }, [streamError]);
 
   if (loading) {
     return (
@@ -93,6 +113,43 @@ export default function DashboardTab() {
 
   return (
     <div className="space-y-6">
+      {/* Real-time Status Bar */}
+      {(connected || lastUpdate) && (
+        <Card className="bg-[#1f1f1f] border-[#2a2a2a]">
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  {connected ? (
+                    <>
+                      <Wifi className="h-4 w-4 text-green-500" />
+                      <span className="text-green-400 text-sm">实时连接中</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="h-4 w-4 text-gray-500" />
+                      <span className="text-gray-400 text-sm">连接已断开</span>
+                    </>
+                  )}
+                </div>
+                {lastUpdate && (
+                  <span className="text-gray-400 text-sm">
+                    最后更新: {lastUpdate.toLocaleTimeString()}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={fetchData}
+                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                disabled={loading}
+              >
+                {loading ? '刷新中...' : '手动刷新'}
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Status Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Redis Status Card */}
@@ -187,97 +244,15 @@ export default function DashboardTab() {
         </Card>
       </div>
 
-      {/* Charts Placeholder */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-[#1f1f1f] border-[#2a2a2a]">
-          <CardHeader>
-            <CardTitle className="text-white">7天命中率趋势</CardTitle>
-            <CardDescription className="text-gray-400">
-              Redis L1 和 MongoDB L2 命中率趋势
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {data.performance.cacheHitTrend.length > 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-gray-500">
-                图表即将显示 (数据: {data.performance.cacheHitTrend.join(', ')})
-              </div>
-            ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-500">
-                暂无数据
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="bg-[#1f1f1f] border-[#2a2a2a]">
-          <CardHeader>
-            <CardTitle className="text-white">数据源分布</CardTitle>
-            <CardDescription className="text-gray-400">
-              Yahoo Finance vs Finnhub vs Fallback
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400">Yahoo Finance</span>
-                <span className="text-white font-medium">{data.dataSources.yahoo.success}</span>
-              </div>
-              <div className="w-full bg-[#262626] rounded-full h-2">
-                <div
-                  className="bg-blue-500 h-2 rounded-full"
-                  style={{
-                    width: `${Math.min(
-                      (data.dataSources.yahoo.success /
-                        (data.dataSources.yahoo.success +
-                          data.dataSources.finnhub.success +
-                          data.dataSources.fallback.count)) * 100,
-                      100
-                    )}%`
-                  }}
-                ></div>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400">Finnhub</span>
-                <span className="text-white font-medium">{data.dataSources.finnhub.success}</span>
-              </div>
-              <div className="w-full bg-[#262626] rounded-full h-2">
-                <div
-                  className="bg-green-500 h-2 rounded-full"
-                  style={{
-                    width: `${Math.min(
-                      (data.dataSources.finnhub.success /
-                        (data.dataSources.yahoo.success +
-                          data.dataSources.finnhub.success +
-                          data.dataSources.fallback.count)) * 100,
-                      100
-                    )}%`
-                  }}
-                ></div>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400">Fallback</span>
-                <span className="text-white font-medium">{data.dataSources.fallback.count}</span>
-              </div>
-              <div className="w-full bg-[#262626] rounded-full h-2">
-                <div
-                  className="bg-yellow-500 h-2 rounded-full"
-                  style={{
-                    width: `${Math.min(
-                      (data.dataSources.fallback.count /
-                        (data.dataSources.yahoo.success +
-                          data.dataSources.finnhub.success +
-                          data.dataSources.fallback.count)) * 100,
-                      100
-                    )}%`
-                  }}
-                ></div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Performance Charts */}
+      <PerformanceCharts
+        cacheHitTrend={data.performance.cacheHitTrend}
+        dataSourceDistribution={{
+          yahoo: data.dataSources.yahoo.success,
+          finnhub: data.dataSources.finnhub.success,
+          fallback: data.dataSources.fallback.count,
+        }}
+      />
 
       {/* Additional Info */}
       <Card className="bg-[#1f1f1f] border-[#2a2a2a]">
@@ -327,6 +302,46 @@ export default function DashboardTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Data Source Fallback Chain Visualizer */}
+      <DataSourceFallbackVisualizer
+        sources={[
+          {
+            name: 'yahoo',
+            displayName: 'Yahoo Finance',
+            status: data.dataSources.yahoo.success > data.dataSources.yahoo.failed * 0.8 ? 'healthy' : 'degraded',
+            successRate: data.dataSources.yahoo.success + data.dataSources.yahoo.failed > 0
+              ? (data.dataSources.yahoo.success / (data.dataSources.yahoo.success + data.dataSources.yahoo.failed)) * 100
+              : 0,
+            responseTime: 120,
+            lastUsed: new Date().toISOString(),
+            batchSize: 50,
+            description: '主要数据源，免费访问股票价格和市值信息',
+          },
+          {
+            name: 'finnhub',
+            displayName: 'Finnhub API',
+            status: data.dataSources.finnhub.success > data.dataSources.finnhub.failed * 0.7 ? 'healthy' : 'degraded',
+            successRate: data.dataSources.finnhub.success + data.dataSources.finnhub.failed > 0
+              ? (data.dataSources.finnhub.success / (data.dataSources.finnhub.success + data.dataSources.finnhub.failed)) * 100
+              : 0,
+            responseTime: 250,
+            lastUsed: new Date().toISOString(),
+            batchSize: 50,
+            description: '备用数据源，提供实时市场数据和公司信息',
+          },
+          {
+            name: 'fallback',
+            displayName: '价格估算',
+            status: 'healthy',
+            successRate: 100,
+            responseTime: 5,
+            lastUsed: new Date().toISOString(),
+            batchSize: 0,
+            description: '最终回退机制，基于历史数据进行价格估算',
+          },
+        ]}
+      />
     </div>
   );
 }

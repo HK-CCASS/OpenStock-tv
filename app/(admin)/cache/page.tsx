@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Database, BarChart3, Shield, Settings, Activity } from 'lucide-react';
+import { Database, BarChart3, Shield, Settings, Activity, FileText } from 'lucide-react';
 
 // Import tab content components
 import DashboardTab from './dashboard/page';
@@ -11,6 +11,7 @@ import DataTab from './data/page';
 import SourcesTab from './sources/page';
 import PerformanceTab from './performance/page';
 import OperationsTab from './operations/page';
+import AuditLogsTab from './audit-logs/page';
 
 /**
  * Market Cap Cache Admin Dashboard
@@ -35,7 +36,7 @@ export default function CacheAdminPage() {
 
       {/* Tab Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 bg-[#1f1f1f] border border-[#2a2a2a]">
+        <TabsList className="grid w-full grid-cols-6 bg-[#1f1f1f] border border-[#2a2a2a]">
           <TabsTrigger
             value="dashboard"
             className="data-[state=active]:bg-[#2a2a2a] data-[state=active]:text-white"
@@ -71,6 +72,13 @@ export default function CacheAdminPage() {
             <Settings className="w-4 h-4 mr-2" />
             缓存操作
           </TabsTrigger>
+          <TabsTrigger
+            value="audit-logs"
+            className="data-[state=active]:bg-[#2a2a2a] data-[state=active]:text-white"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            审计日志
+          </TabsTrigger>
         </TabsList>
 
         {/* Tab Content */}
@@ -93,6 +101,10 @@ export default function CacheAdminPage() {
 
           <TabsContent value="operations" className="space-y-6">
             <OperationsTab />
+          </TabsContent>
+
+          <TabsContent value="audit-logs" className="space-y-6">
+            <AuditLogsTab />
           </TabsContent>
         </div>
       </Tabs>

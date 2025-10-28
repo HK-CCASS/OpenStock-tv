@@ -4,6 +4,7 @@ export const NAV_ITEMS = [
     { href: '/multi-stock', label: 'Multi-Stock' },
     { href: '/watchlists', label: 'Watchlists' },
     { href: '/heatmap', label: 'Heatmap' },
+    { href: '/cache', label: 'Cache' },
 ];
 
 // Sign-up form select options
