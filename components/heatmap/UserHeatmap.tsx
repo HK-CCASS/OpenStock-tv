@@ -795,7 +795,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
   return (
     <div ref={containerRef} className="w-full h-screen bg-[#1a1a1a] flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
-      <div className="bg-[#1f1f1f] border-b border-[#2a2a2a] px-6 py-3 flex items-center gap-4 flex-shrink-0">
+      <div className="bg-[#1f1f1f] border-b border-[#2a2a2a] px-3 py-3 flex items-center gap-3 flex-shrink-0">
         {selectedPool && (
           <button
             onClick={() => setSelectedPool(null)}
@@ -885,7 +885,7 @@ export default function UserHeatmap({ userId }: { userId: string }) {
       </div>
 
       {/* 图例说明 - TradingView风格渐变条（紧凑版）*/}
-      <div className="bg-[#1f1f1f] border-t border-[#2a2a2a] px-4 py-2 flex-shrink-0">
+      <div className="bg-[#1f1f1f] border-t border-[#2a2a2a] px-3 py-2 flex-shrink-0">
         <div className="flex items-center justify-center gap-2">
           <span className="text-gray-400 text-xs">涨跌幅颜色</span>
 

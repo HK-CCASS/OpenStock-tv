@@ -268,22 +268,18 @@ export async function getInitialQuotes(symbols: string[]): Promise<Map<string, {
   }
 
   try {
-    // 并行获取报价和市值缓存
-    const [quotesMap, marketCapMap] = await Promise.all([
-      getBatchStockQuotes(symbols),
-      getMarketCapCache(symbols),
-    ]);
-    
+    // ✅ 只获取市值数据（WebSocket提供实时价格，无需启动时获取）
+    const marketCapMap = await getMarketCapCache(symbols);
+
     const initialQuotes = new Map();
-    quotesMap.forEach((data, symbol) => {
-      const cachedMarketCap = marketCapMap.get(symbol);
-      
+    marketCapMap.forEach((cachedData, symbol) => {
+      // 价格、涨跌幅、成交量都从WebSocket获取，初始化为0即可
       initialQuotes.set(symbol, {
-        price: data.price || 0,
-        change: data.change || 0,
-        changePercent: data.changePercent || 0,
-        volume: data.previousClose || 0, // 使用前收盘价作为基准
-        marketCap: cachedMarketCap?.marketCap || data.marketCap || 0,
+        price: 0,            // WebSocket会实时更新
+        change: 0,           // WebSocket会实时更新
+        changePercent: 0,    // WebSocket会实时更新
+        volume: 0,           // WebSocket会实时更新
+        marketCap: cachedData.marketCap || 0,  // 市值来自缓存
       });
     });
 
